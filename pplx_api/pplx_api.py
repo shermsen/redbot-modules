@@ -173,12 +173,15 @@ class PerplexityAI(commands.Cog):
                 await ctx.typing()
                 await asyncio.sleep(0.5)
 
-            # Send citations
+            # Send citations as embed
             citation_lines = self._format_search_results(search_results)
             if citation_lines:
-                header = "**Quellen:**"
-                full_message = f"{header}\n" + "\n".join(citation_lines)
-                await ctx.send(full_message)
+                embed = discord.Embed(
+                    title="📚 Quellen",
+                    description="\n".join(citation_lines),
+                    color=await ctx.embed_color()
+                )
+                await ctx.send(embed=embed)
         except Exception as e:
             self.log.error(f"Error processing response: {e}")
             await ctx.send(f"❌ Error processing response: {str(e)}")
@@ -220,7 +223,7 @@ class PerplexityAI(commands.Cog):
             return []
 
     def _format_search_results(self, search_results: List[Dict[str, str]]) -> List[str]:
-        """Format search results for display"""
+        """Format search results for display with hyperlinked titles"""
         if not search_results:
             return []
         
@@ -231,18 +234,19 @@ class PerplexityAI(commands.Cog):
             date = result.get('date', '')
             
             if title and date:
-                # Format: "Title" (Date) - <URL>
+                # Format: [Title](URL) (Year)
                 try:
                     parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
-                    date_str = parsed_date.strftime('%Y-%m-%d')
-                    formatted.append(f"{i}. \"{title}\" ({date_str}) - <{url}>")
+                    year = parsed_date.strftime('%Y')
+                    formatted.append(f"{i}. [{title}]({url}) ({year})")
                 except (ValueError, AttributeError):
-                    formatted.append(f"{i}. \"{title}\" - <{url}>")
+                    # Fallback without year if date parsing fails
+                    formatted.append(f"{i}. [{title}]({url})")
             elif title:
-                # Format: "Title" - <URL>
-                formatted.append(f"{i}. \"{title}\" - <{url}>")
+                # Format: [Title](URL)
+                formatted.append(f"{i}. [{title}]({url})")
             elif url:
-                # Fallback: just URL
+                # Fallback: just URL for cases without title
                 formatted.append(f"{i}. <{url}>")
         
         return formatted
