@@ -82,15 +82,6 @@ class PerplexityAI(commands.Cog):
 
         await self.do_perplexity(ctx, question, model="sonar-deep-research")
 
-    @commands.command(aliases=['r1'])
-    async def r1model(self, ctx: commands.Context, *, message: str = ""):
-        """Send a message to Perplexity AI using the r1-1776 model."""
-        question = await self._get_question(ctx, message)
-        if not question:
-            await ctx.send("Please provide a question either as text or by replying to a message.")
-            return
-
-        await self.do_perplexity(ctx, question, model="r1-1776")
 
     async def _get_question(self, ctx: commands.Context, message: str = "") -> str:
         """Extract question from reference and additional text."""
