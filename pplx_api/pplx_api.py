@@ -158,6 +158,9 @@ class PerplexityAI(commands.Cog):
             upload_url = await self._handle_reasoning_content(content)
             if upload_url:
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+            
+            # Remove markdown tables (Discord doesn't display them properly)
+            content = self._convert_tables_to_lists(content)
 
             # Split and send content
             chunks = self.smart_split(content)
@@ -250,6 +253,44 @@ class PerplexityAI(commands.Cog):
                 formatted.append(f"{i}. <{url}>")
         
         return formatted
+
+    def _convert_tables_to_lists(self, content: str) -> str:
+        """Convert markdown tables to Discord-friendly lists"""
+        lines = content.split('\n')
+        result_lines = []
+        in_table = False
+        
+        for line in lines:
+            # Detect table rows (contain | but not at start/end only)
+            if '|' in line and not line.strip().startswith('```'):
+                # Skip header separator lines (contain --- and |)
+                if '---' in line and '|' in line:
+                    continue
+                    
+                # Extract table data
+                cells = [cell.strip() for cell in line.split('|')]
+                # Remove empty cells from start/end
+                cells = [cell for cell in cells if cell]
+                
+                if cells:  # Only process non-empty rows
+                    if not in_table:
+                        in_table = True
+                        # First row becomes header
+                        result_lines.append(f"**{cells[0]}:**")
+                    else:
+                        # Data rows become bullet points
+                        if len(cells) >= 2:
+                            row_content = f"**{cells[0]}**: {' → '.join(cells[1:])}"
+                            result_lines.append(f"• {row_content}")
+                
+            else:
+                if in_table:
+                    # End of table, add spacing
+                    result_lines.append('')
+                    in_table = False
+                result_lines.append(line)
+        
+        return '\n'.join(result_lines)
 
     async def _handle_reasoning_content(self, content: str) -> Optional[str]:
         """Extract and upload reasoning content, return URL if successful"""
