@@ -39,6 +39,114 @@ class getnfo(commands.Cog):
         await self.bot.tree.sync()
         await ctx.message.add_reaction("✅")
 
+
+    @commands.hybrid_command(name="mediainfo", description="Fetch MediaInfo via crowdNFO")
+    @app_commands.describe(release="Release name")
+    async def mediainfo(self, ctx, *, release: str):
+        """Fetch MediaInfo from crowdnfo.net"""
+        await ctx.typing()
+        
+        # Fetch MediaInfo specifically without fallback
+        url = f"{self.crowdnfo_api_base_url}/releases/{release}/files/best"
+        params = {
+            "type": "MediaInfo",
+            "fallback": "false"
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                mediainfo_data = response.json()
+                
+                # Create embed with MediaInfo
+                embed = discord.Embed(
+                    title=f"{release}",
+                    color=discord.Color.from_rgb(41, 134, 204)
+                )
+                
+                # Format General information
+                general_info = []
+                if mediainfo_data.get('fileSize'):
+                    general_info.append(f"File Size: {self.format_file_size(mediainfo_data['fileSize'])}")
+                if mediainfo_data.get('duration'):
+                    general_info.append(f"Duration: {self.format_duration(mediainfo_data['duration'])}")
+                
+                if general_info:
+                    embed.add_field(name="General", value="\n".join(general_info), inline=False)
+                
+                # Format Video information
+                video_info = []
+                if mediainfo_data.get('videoResolution'):
+                    video_info.append(f"Resolution: {mediainfo_data['videoResolution']}")
+                if mediainfo_data.get('videoCodec'):
+                    video_info.append(f"Codec: {mediainfo_data['videoCodec']}")
+                if mediainfo_data.get('videoBitRate'):
+                    video_info.append(f"Bitrate: {self.format_bitrate(mediainfo_data['videoBitRate'])}")
+                if mediainfo_data.get('videoFrameRate'):
+                    video_info.append(f"Frame Rate: {mediainfo_data['videoFrameRate']} FPS")
+                if mediainfo_data.get('videoBitDepth'):
+                    video_info.append(f"Bit Depth: {mediainfo_data['videoBitDepth']} Bit")
+                
+                if video_info:
+                    embed.add_field(name="Video", value="\n".join(video_info), inline=False)
+                
+                # Format Audio information
+                audio_tracks = mediainfo_data.get('audioTracks', [])
+                if audio_tracks:
+                    audio_info = []
+                    for track in audio_tracks:
+                        track_info = []
+                        if track.get('language'):
+                            track_info.append(track['language'])
+                        if track.get('codec'):
+                            track_info.append(track['codec'])
+                        if track.get('channels'):
+                            track_info.append(f"{track['channels']}ch")
+                        if track.get('bitRate'):
+                            track_info.append(f"@{self.format_bitrate(track['bitRate'])}")
+                        if track.get('isDefault'):
+                            track_info.append("Default")
+                        
+                        audio_info.append(" ".join(track_info))
+                    
+                    embed.add_field(name="Audio", value="\n".join(audio_info), inline=False)
+                
+                # Format Subtitle information
+                subtitle_tracks = mediainfo_data.get('subtitleTracks', [])
+                if subtitle_tracks:
+                    subtitle_info = []
+                    for track in subtitle_tracks:
+                        track_info = []
+                        if track.get('language'):
+                            track_info.append(track['language'])
+                        if track.get('forced'):
+                            track_info.append("Forced")
+                        if track.get('format'):
+                            track_info.append(track['format'])
+                        if track.get('isDefault'):
+                            track_info.append("Default")
+                        
+                        subtitle_info.append(" ".join(track_info))
+                    
+                    embed.add_field(name="Subtitles", value="\n".join(subtitle_info), inline=False)
+                
+                # Add source field
+                embed.add_field(name="Source", value="[crowdNFO](https://crowdnfo.net/)", inline=False)
+                
+                # Create button
+                release_id = mediainfo_data.get('releaseId')
+                button = Button(label="View on crowdNFO", url=f"https://crowdnfo.net/release/{release_id}")
+                view = View()
+                view.add_item(button)
+                
+                await ctx.send(embed=embed, view=view)
+            else:
+                await ctx.send("No MediaInfo found for this release on crowdNFO.")
+        except Exception as e:
+            logging.error(f"Error fetching MediaInfo: {e}")
+            await ctx.send("An error occurred while fetching MediaInfo.")
+
+
     @commands.hybrid_command(name="nfo", description="Fetch NFO via xREL/srrDB/crowdNFO")
     @app_commands.describe(release="Release name")
     async def nfo(self, ctx, *, release: str):
@@ -431,8 +539,8 @@ class getnfo(commands.Cog):
         
         # Add source field
         embed.add_field(name="Source", value="[crowdNFO](https://crowdnfo.net/)", inline=False)
-		
-        embed.set_footer(text="Info: keine NFO gefunden, https://crowdnfo.net MediaInfo Fallback")
+        
+        embed.set_footer(text="Info: keine NFO gefunden, crowdNFO MediaInfo Fallback")
         
         # Create view with button
         view = View()
