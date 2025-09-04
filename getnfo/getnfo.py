@@ -432,7 +432,7 @@ class getnfo(commands.Cog):
         # Add source field
         embed.add_field(name="Source", value="[crowdNFO](https://crowdnfo.net/)", inline=False)
 		
-		embed.set_footer(text="Info: keine NFO gefunden, https://crowdnfo.net MediaInfo Fallback")
+        embed.set_footer(text="Info: keine NFO gefunden, https://crowdnfo.net MediaInfo Fallback")
         
         # Create view with button
         view = View()
