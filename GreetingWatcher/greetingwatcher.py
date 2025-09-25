@@ -38,7 +38,7 @@ class GreetingWatcher(commands.Cog):
             return
 
         for greeting in GreetingWatcher.greetings_map:
-            if greeting in message.content.lower():
+            if message.content.lower().startswith(greeting):
                 if self.is_greeting_correct(greeting):
                     if greeting == "guna":
                         bedge = await message.guild.fetch_emoji(1311619322187223120)
@@ -54,7 +54,7 @@ class GreetingWatcher(commands.Cog):
         
         # streak
 
-        if "gumo" in message.content.lower() and message.author.id not in GreetingWatcher.gumo_users and self.is_greeting_correct("gumo"):
+        if message.content.lower().startswith("gumo") and message.author.id not in GreetingWatcher.gumo_users and self.is_greeting_correct("gumo"):
             GreetingWatcher.gumo_streak += 1
             GreetingWatcher.gumo_users.append(message.author.id)
 
