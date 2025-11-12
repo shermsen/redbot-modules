@@ -18,9 +18,6 @@ class PerplexityAI(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=359554900000)
         default_global = {
-            "perplexity_api_key": None,
-            "perplexity_api_key_2": None,
-            "perplexity_api_key_3": None,
             "model": "sonar-reasoning-pro",
             "max_tokens": 8000,
             "prompt": "",
@@ -126,7 +123,7 @@ class PerplexityAI(commands.Cog):
             api_keys = (await self.perplexity_api_keys()).values()
             if not any(api_keys):
                 prefix = ctx.prefix if ctx.prefix else "[p]"
-                return await ctx.send(f"API keys missing! Use `{prefix}set api perplexity api_key,api_key_2,api_key_3`")
+                return await ctx.send(f"API keys missing! Use `{prefix}set api perplexity api_key,<YOUR_KEY>` or add multiple keys: `{prefix}set api perplexity api_key,<YOUR_KEY> api_key_2,<YOUR_KEY_2>`")
 
             # Get configuration
             model, max_tokens = await self._get_model_config(model)
@@ -428,7 +425,3 @@ class PerplexityAI(commands.Cog):
         """Set the prompt for Perplexity AI."""
         await self.config.prompt.set(prompt)
         await ctx.send("Perplexity AI prompt set.")
-
-
-def setup(bot):
-    bot.add_cog(PerplexityAI(bot))

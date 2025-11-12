@@ -2,7 +2,7 @@
     "author": ["hauge"],
     "name": "pplx_api",
     "description": "Send messages to Perplexity",
-    "install_msg": "Requires an Perplexity API key. Use `[p] set api pplx api_key <value>`.",
+    "install_msg": "Requires a Perplexity API key. Use `[p]set api perplexity api_key,<YOUR_KEY>`.",
     "short": "Send messages to Perplexity",
     "tags": ["pplx", "perplexity"],
     "requirements": ["openai"],
