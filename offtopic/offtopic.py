@@ -1,7 +1,5 @@
 import discord
-from discord import app_commands
-from discord.ext import commands
-from redbot.core import Config, checks, commands as red_commands
+from redbot.core import Config, checks, commands
 from redbot.core.bot import Red
 from openai import AsyncOpenAI
 from datetime import datetime, timedelta, timezone
@@ -11,7 +9,7 @@ import json
 import logging
 
 
-class OffTopic(red_commands.Cog):
+class OffTopic(commands.Cog):
     """Detects off-topic discussions using AI and moves them to a designated channel."""
 
     def __init__(self, bot: Red):
@@ -61,30 +59,28 @@ class OffTopic(red_commands.Cog):
 
     # ==================== SLASH COMMAND ====================
 
-    @app_commands.command(name="offtopic", description="Analyze recent messages for off-topic content")
-    async def offtopic_slash(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="checkofftopic", description="Analyze recent messages for off-topic content")
+    @commands.guild_only()
+    async def offtopic_slash(self, ctx: commands.Context):
         """Analyze the last 30 messages for off-topic discussion."""
-        await interaction.response.defer(thinking=True)
+        await ctx.defer()
 
-        guild = interaction.guild
-        channel = interaction.channel
-        user = interaction.user
+        guild = ctx.guild
+        channel = ctx.channel
+        user = ctx.author
 
         # Check if user has required role
         allowed_role_ids = await self.config.guild(guild).allowed_role_ids()
         if allowed_role_ids:
             user_role_ids = [r.id for r in user.roles]
             if not any(role_id in user_role_ids for role_id in allowed_role_ids):
-                await interaction.followup.send(
-                    "You don't have permission to use this command.",
-                    ephemeral=True
-                )
+                await ctx.send("You don't have permission to use this command.", ephemeral=True)
                 return
 
         # Check configuration
         offtopic_channel_id = await self.config.guild(guild).offtopic_channel_id()
         if not offtopic_channel_id:
-            await interaction.followup.send(
+            await ctx.send(
                 "Off-topic channel not configured. Ask an admin to run `!offtopic setchannel #channel`.",
                 ephemeral=True
             )
@@ -92,7 +88,7 @@ class OffTopic(red_commands.Cog):
 
         offtopic_channel = guild.get_channel(offtopic_channel_id)
         if not offtopic_channel:
-            await interaction.followup.send(
+            await ctx.send(
                 "Configured off-topic channel no longer exists. Ask an admin to reconfigure.",
                 ephemeral=True
             )
@@ -102,7 +98,7 @@ class OffTopic(red_commands.Cog):
         channel_topics = await self.config.guild(guild).channel_topics()
         channel_topic = channel_topics.get(str(channel.id))
         if not channel_topic:
-            await interaction.followup.send(
+            await ctx.send(
                 f"No topic configured for {channel.mention}. Ask an admin to run `!offtopic settopic`.",
                 ephemeral=True
             )
@@ -111,7 +107,7 @@ class OffTopic(red_commands.Cog):
         # Check OpenAI API key
         client = await self._get_openai_client()
         if not client:
-            await interaction.followup.send(
+            await ctx.send(
                 "API key not configured. Ask an admin to run `[p]set api offtopic openai_api_key,YOUR_KEY`.",
                 ephemeral=True
             )
@@ -120,7 +116,7 @@ class OffTopic(red_commands.Cog):
         # Check TransferChannel cog
         tc_cog = self.bot.get_cog("TransferChannel")
         if not tc_cog:
-            await interaction.followup.send(
+            await ctx.send(
                 "TransferChannel cog is not installed. This is required for moving messages.",
                 ephemeral=True
             )
@@ -129,25 +125,19 @@ class OffTopic(red_commands.Cog):
         # Fetch recent messages
         messages = await self._fetch_recent_messages(channel)
         if not messages:
-            await interaction.followup.send(
-                "No recent messages found to analyze (within 3 hours).",
-                ephemeral=True
-            )
+            await ctx.send("No recent messages found to analyze (within 3 hours).", ephemeral=True)
             return
 
         # Analyze with OpenAI
         result = await self._analyze_messages(client, messages, channel_topic)
         if result is None:
-            await interaction.followup.send(
-                "Failed to analyze messages. Please try again later.",
-                ephemeral=True
-            )
+            await ctx.send("Failed to analyze messages. Please try again later.", ephemeral=True)
             return
 
         first_offtopic_id, reason = result
 
         if first_offtopic_id is None:
-            await interaction.followup.send("No off-topic discussion found in the last 30 messages!")
+            await ctx.send("No off-topic discussion found in the last 30 messages!")
             return
 
         # Find the message object
@@ -158,7 +148,7 @@ class OffTopic(red_commands.Cog):
                 break
 
         if not first_offtopic_msg:
-            await interaction.followup.send(
+            await ctx.send(
                 f"Could not find message with ID {first_offtopic_id}. It may have been deleted.",
                 ephemeral=True
             )
@@ -190,7 +180,7 @@ class OffTopic(red_commands.Cog):
             f"({vote_threshold} votes needed, expires in {timeout_minutes} minutes)"
         )
 
-        summary_message = await interaction.followup.send(summary, wait=True)
+        summary_message = await ctx.send(summary)
 
         # Start voting
         vote_result = await self._handle_voting(
@@ -200,7 +190,7 @@ class OffTopic(red_commands.Cog):
         if vote_result == "approve":
             # Transfer and delete messages
             result = await self._transfer_messages(
-                interaction, first_offtopic_msg, offtopic_channel, tc_cog
+                ctx, first_offtopic_msg, offtopic_channel, tc_cog
             )
             if result:
                 count, jump_url = result
@@ -225,15 +215,15 @@ class OffTopic(red_commands.Cog):
 
     # ==================== ADMIN COMMANDS ====================
 
-    @red_commands.group(name="offtopic", invoke_without_command=True)
+    @commands.group(name="offtopic", invoke_without_command=True)
     @checks.admin_or_permissions(manage_guild=True)
-    async def offtopic_group(self, ctx: red_commands.Context):
+    async def offtopic_group(self, ctx: commands.Context):
         """Off-topic detection configuration."""
         await ctx.send_help(ctx.command)
 
     @offtopic_group.command(name="setchannel")
     @checks.admin_or_permissions(manage_guild=True)
-    async def set_channel(self, ctx: red_commands.Context, channel: discord.TextChannel):
+    async def set_channel(self, ctx: commands.Context, channel: discord.TextChannel):
         """Set the destination channel for off-topic messages."""
         await self.config.guild(ctx.guild).offtopic_channel_id.set(channel.id)
         await ctx.send(f"Off-topic destination set to {channel.mention}")
@@ -241,7 +231,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="addrole")
     @checks.admin_or_permissions(manage_guild=True)
-    async def add_role(self, ctx: red_commands.Context, role: discord.Role):
+    async def add_role(self, ctx: commands.Context, role: discord.Role):
         """Add a role that can use the /offtopic command."""
         async with self.config.guild(ctx.guild).allowed_role_ids() as role_ids:
             if role.id not in role_ids:
@@ -251,7 +241,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="removerole")
     @checks.admin_or_permissions(manage_guild=True)
-    async def remove_role(self, ctx: red_commands.Context, role: discord.Role):
+    async def remove_role(self, ctx: commands.Context, role: discord.Role):
         """Remove a role from using the /offtopic command."""
         async with self.config.guild(ctx.guild).allowed_role_ids() as role_ids:
             if role.id in role_ids:
@@ -263,7 +253,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="clearroles")
     @checks.admin_or_permissions(manage_guild=True)
-    async def clear_roles(self, ctx: red_commands.Context):
+    async def clear_roles(self, ctx: commands.Context):
         """Clear all role restrictions (allow everyone)."""
         await self.config.guild(ctx.guild).allowed_role_ids.set([])
         await ctx.send("Role restrictions cleared. Everyone can now use /offtopic.")
@@ -271,7 +261,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="settopic")
     @checks.admin_or_permissions(manage_guild=True)
-    async def set_topic(self, ctx: red_commands.Context, channel: discord.TextChannel = None):
+    async def set_topic(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """Set a channel's topic description interactively."""
         channel = channel or ctx.channel
         current_topics = await self.config.guild(ctx.guild).channel_topics()
@@ -308,7 +298,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="gettopic")
     @checks.admin_or_permissions(manage_guild=True)
-    async def get_topic(self, ctx: red_commands.Context, channel: discord.TextChannel = None):
+    async def get_topic(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """View a channel's configured topic."""
         channel = channel or ctx.channel
         current_topics = await self.config.guild(ctx.guild).channel_topics()
@@ -321,7 +311,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="listtopics")
     @checks.admin_or_permissions(manage_guild=True)
-    async def list_topics(self, ctx: red_commands.Context):
+    async def list_topics(self, ctx: commands.Context):
         """List all configured channel topics."""
         current_topics = await self.config.guild(ctx.guild).channel_topics()
 
@@ -342,7 +332,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="removetopic")
     @checks.admin_or_permissions(manage_guild=True)
-    async def remove_topic(self, ctx: red_commands.Context, channel: discord.TextChannel):
+    async def remove_topic(self, ctx: commands.Context, channel: discord.TextChannel):
         """Remove a channel's topic configuration."""
         current_topics = await self.config.guild(ctx.guild).channel_topics()
 
@@ -356,7 +346,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="setmodel")
     @checks.is_owner()
-    async def set_model(self, ctx: red_commands.Context, model: str):
+    async def set_model(self, ctx: commands.Context, model: str):
         """Set the OpenAI model to use."""
         await self.config.openai_model.set(model)
         await ctx.send(f"OpenAI model set to `{model}`")
@@ -364,7 +354,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="setbaseurl")
     @checks.is_owner()
-    async def set_base_url(self, ctx: red_commands.Context, url: str):
+    async def set_base_url(self, ctx: commands.Context, url: str):
         """Set the OpenAI API base URL."""
         await self.config.openai_base_url.set(url)
         self._reset_client()
@@ -373,7 +363,7 @@ class OffTopic(red_commands.Cog):
 
     @offtopic_group.command(name="settings")
     @checks.admin_or_permissions(manage_guild=True)
-    async def show_settings(self, ctx: red_commands.Context):
+    async def show_settings(self, ctx: commands.Context):
         """View current off-topic settings."""
         guild_config = await self.config.guild(ctx.guild).all()
         global_config = await self.config.all()
@@ -551,7 +541,7 @@ Find the FIRST message where the conversation went off-topic for a channel about
 
     async def _transfer_messages(
         self,
-        interaction: discord.Interaction,
+        ctx: commands.Context,
         first_offtopic_msg: discord.Message,
         destination: discord.TextChannel,
         tc_cog
@@ -595,5 +585,5 @@ Find the FIRST message where the conversation went off-topic for a channel about
 
         except Exception as e:
             self.log.error(f"Transfer error: {e}")
-            await interaction.channel.send(f"Error transferring messages: {e}")
+            await ctx.channel.send(f"Error transferring messages: {e}")
             return None
