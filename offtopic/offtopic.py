@@ -7,6 +7,7 @@ from typing import Optional, Tuple, List
 import asyncio
 import json
 import logging
+import re
 
 
 class OffTopic(commands.Cog):
@@ -60,9 +61,18 @@ class OffTopic(commands.Cog):
     # ==================== SLASH COMMAND ====================
 
     @app_commands.command(name="offtopic", description="Arr! Schaut ob hier wer vom Kurs abgekommen ist")
+    @app_commands.describe(
+        nachricht="Link zur Startnachricht (optional)",
+        ziel="Zielkanal für Off-Topic Nachrichten (optional)"
+    )
     @app_commands.guild_only()
-    async def offtopic_slash(self, interaction: discord.Interaction):
-        """Analyze the last 30 messages for off-topic discussion."""
+    async def offtopic_slash(
+        self,
+        interaction: discord.Interaction,
+        nachricht: str = None,
+        ziel: discord.TextChannel = None
+    ):
+        """Analyze messages for off-topic discussion."""
         await interaction.response.defer()
 
         guild = interaction.guild
@@ -79,25 +89,86 @@ class OffTopic(commands.Cog):
                 await interaction.followup.send("Arr, du hast keine Berechtigung für diesen Befehl, Landratte!", ephemeral=True)
                 return
 
-        # Check configuration
-        offtopic_channel_id = await self.config.guild(guild).offtopic_channel_id()
-        if not offtopic_channel_id:
+        # Determine destination channel
+        default_offtopic_id = await self.config.guild(guild).offtopic_channel_id()
+        if ziel:
+            destination_channel = ziel
+            if destination_channel.id == channel.id:
+                await interaction.followup.send(
+                    "Arr, du kannst nicht in denselben Kanal verschieben!",
+                    ephemeral=True
+                )
+                return
+        else:
+            if not default_offtopic_id:
+                await interaction.followup.send(
+                    "Blimey! Kein Off-Topic Kanal konfiguriert. Ein Admin muss `!offtopic setchannel #channel` ausführen.",
+                    ephemeral=True
+                )
+                return
+            destination_channel = guild.get_channel(default_offtopic_id)
+            if not destination_channel:
+                await interaction.followup.send(
+                    "Der Off-Topic Kanal ist über Bord gegangen! Ein Admin muss ihn neu konfigurieren.",
+                    ephemeral=True
+                )
+                return
+
+        # Don't allow command in the destination channel itself
+        if channel.id == destination_channel.id:
             await interaction.followup.send(
-                "Blimey! Kein Off-Topic Kanal konfiguriert. Ein Admin muss `!offtopic setchannel #channel` ausführen.",
+                "Arr, du bist bereits im Zielkanal! Hier ist (fast) alles erlaubt. 🏴‍☠️",
                 ephemeral=True
             )
             return
 
-        offtopic_channel = guild.get_channel(offtopic_channel_id)
-        if not offtopic_channel:
-            await interaction.followup.send(
-                "Der Off-Topic Kanal ist über Bord gegangen! Ein Admin muss ihn neu konfigurieren.",
-                ephemeral=True
-            )
-            return
+        # Parse message link if provided
+        start_message = None
+        if nachricht:
+            match = re.match(r'https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)', nachricht)
+            if not match:
+                await interaction.followup.send(
+                    "Ungültiger Nachrichtenlink! Rechtsklick auf Nachricht → 'Nachrichtenlink kopieren'",
+                    ephemeral=True
+                )
+                return
+            msg_guild_id, msg_channel_id, msg_id = map(int, match.groups())
+            if msg_channel_id != channel.id:
+                await interaction.followup.send(
+                    "Die Nachricht muss aus diesem Kanal sein!",
+                    ephemeral=True
+                )
+                return
+            try:
+                start_message = await channel.fetch_message(msg_id)
+            except discord.NotFound:
+                await interaction.followup.send(
+                    "Nachricht nicht gefunden!",
+                    ephemeral=True
+                )
+                return
+            # Check if within 3 hours
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+            if start_message.created_at < cutoff:
+                await interaction.followup.send(
+                    "Die Nachricht ist zu alt! Maximal 3 Stunden zurück.",
+                    ephemeral=True
+                )
+                return
 
-        # Get server prompt
-        server_prompt = await self.config.guild(guild).server_prompt()
+        # Get prompt - different logic for custom destination vs off-topic
+        is_custom_destination = ziel and ziel.id != default_offtopic_id
+        if is_custom_destination:
+            # Custom destination: detect messages that belong in wrong channel
+            server_prompt = (
+                f"Aktueller Kanal: #{channel.name}\n"
+                f"Zielkanal: #{destination_channel.name}\n\n"
+                f"Finde Nachrichten die eigentlich in #{destination_channel.name} gehören, "
+                f"aber fälschlicherweise in #{channel.name} gepostet wurden."
+            )
+        else:
+            # Default off-topic: detect derailed conversations
+            server_prompt = await self.config.guild(guild).server_prompt()
 
         # Check OpenAI API key
         client = await self._get_openai_client()
@@ -117,10 +188,17 @@ class OffTopic(commands.Cog):
             )
             return
 
-        # Fetch recent messages
-        messages = await self._fetch_recent_messages(channel)
+        # Fetch messages (from start_message if provided, else last 30)
+        if start_message:
+            messages = [start_message]
+            async for msg in channel.history(after=start_message, oldest_first=True):
+                if not msg.author.bot:
+                    messages.append(msg)
+        else:
+            messages = await self._fetch_recent_messages(channel)
+
         if not messages:
-            await interaction.followup.send("Keine aktuellen Nachrichten zum Analysieren gefunden (max. 3 Stunden alt).", ephemeral=True)
+            await interaction.followup.send("Keine Nachrichten zum Analysieren gefunden.", ephemeral=True)
             return
 
         # Analyze with OpenAI
@@ -168,15 +246,40 @@ class OffTopic(commands.Cog):
         vote_timeout = await self.config.guild(guild).vote_timeout()
         timeout_minutes = vote_timeout // 60
 
-        summary = (
-            f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
-            f"Ab dieser Nachricht ging's los:\n\n"
-            f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
-            f"**Grund:** {reason}\n\n"
-            f"**{move_count} Nachricht{'en' if move_count != 1 else ''}** würden nach {offtopic_channel.mention} verfrachtet\n\n"
-            f"👍 = Ab in die Bilge damit! | 👎 = Lass mal stecken\n"
-            f"({vote_threshold} Stimmen nötig, läuft ab in {timeout_minutes} Min.)"
-        )
+        if is_custom_destination:
+            # Custom destination: wrong channel message
+            summary = (
+                f"**📦 Falscher Kanal!**\n\n"
+                f"Ab dieser Nachricht gehört's nach {destination_channel.mention}:\n\n"
+                f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
+                f"**Grund:** {reason}\n\n"
+                f"**{move_count} Nachricht{'en' if move_count != 1 else ''}** würden nach {destination_channel.mention} verschoben\n\n"
+                f"👍 = Verschieben | 👎 = Hier lassen\n"
+                f"({vote_threshold} Stimmen nötig, läuft ab in {timeout_minutes} Min.)"
+            )
+            base_summary = (
+                f"**📦 Falscher Kanal!**\n\n"
+                f"Ab dieser Nachricht gehört's nach {destination_channel.mention}:\n\n"
+                f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
+                f"**Grund:** {reason}\n\n"
+            )
+        else:
+            # Default off-topic: derailed conversation
+            summary = (
+                f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
+                f"Ab dieser Nachricht ging's los:\n\n"
+                f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
+                f"**Grund:** {reason}\n\n"
+                f"**{move_count} Nachricht{'en' if move_count != 1 else ''}** würden nach {destination_channel.mention} verfrachtet\n\n"
+                f"👍 = Ab in die Bilge damit! | 👎 = Lass mal stecken\n"
+                f"({vote_threshold} Stimmen nötig, läuft ab in {timeout_minutes} Min.)"
+            )
+            base_summary = (
+                f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
+                f"Ab dieser Nachricht ging's los:\n\n"
+                f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
+                f"**Grund:** {reason}\n\n"
+            )
 
         summary_message = await interaction.followup.send(summary, wait=True)
 
@@ -185,26 +288,21 @@ class OffTopic(commands.Cog):
             channel, summary_message, vote_threshold, vote_timeout
         )
 
-        # Base summary without voting instructions
-        base_summary = (
-            f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
-            f"Ab dieser Nachricht ging's los:\n\n"
-            f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
-            f"**Grund:** {reason}\n\n"
-        )
-
         if vote_result == "approve":
             self.log.info(f"Vote passed: approved")
             # Summary message will be deleted with transferred messages, so send new status
-            status_msg = await channel.send(f"⏳ Wird nach {offtopic_channel.mention} verfrachtet...")
+            status_msg = await channel.send(f"⏳ Wird nach {destination_channel.mention} verschoben...")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
-                interaction, first_offtopic_msg, offtopic_channel, tc_cog
+                interaction, first_offtopic_msg, destination_channel, tc_cog
             )
             if result:
                 count, jump_url = result
-                self.log.info(f"Transferred {count} messages to #{offtopic_channel.name}")
-                await status_msg.edit(content=f"🏴‍☠️ **{count} Nachrichten nach {offtopic_channel.mention} verschifft!** {jump_url}\n\n🔨 Bleibt beim Thema - sonst geht's über die Planke!")
+                self.log.info(f"Transferred {count} messages to #{destination_channel.name}")
+                if is_custom_destination:
+                    await status_msg.edit(content=f"📦 **{count} Nachrichten nach {destination_channel.mention} verschoben!** {jump_url}")
+                else:
+                    await status_msg.edit(content=f"🏴‍☠️ **{count} Nachrichten nach {destination_channel.mention} verschifft!** {jump_url}\n\n🔨 Bleibt beim Thema - sonst geht's über die Planke!")
             else:
                 await status_msg.edit(content="❌ Arr, da ist was schiefgelaufen beim Verschieben!")
 
