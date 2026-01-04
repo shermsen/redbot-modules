@@ -590,7 +590,7 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
                 emoji_name = getattr(reaction.emoji, 'name', str(reaction.emoji))
 
                 # Admin override emojis
-                if emoji_name in ['SadgeBusiness', 'Okay', 'subi', 'grrr', 'HYPERS']:
+                if emoji_name in ['SadgeBusiness', 'Okay', 'subi', 'grrr', 'HYPERS', 'YEP']:
                     async for user in reaction.users():
                         if not user.bot and user.guild_permissions.administrator:
                             self.log.info(f"Admin {user} forced approve with :{emoji_name}:")
