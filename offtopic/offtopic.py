@@ -26,7 +26,7 @@ class OffTopic(red_commands.Cog):
 
         default_guild = {
             "offtopic_channel_id": None,
-            "allowed_role_id": None,
+            "allowed_role_ids": [],
             "vote_timeout": 300,
             "vote_threshold": 5,
             "channel_topics": {},
@@ -71,10 +71,10 @@ class OffTopic(red_commands.Cog):
         user = interaction.user
 
         # Check if user has required role
-        allowed_role_id = await self.config.guild(guild).allowed_role_id()
-        if allowed_role_id:
-            role = guild.get_role(allowed_role_id)
-            if role and role not in user.roles:
+        allowed_role_ids = await self.config.guild(guild).allowed_role_ids()
+        if allowed_role_ids:
+            user_role_ids = [r.id for r in user.roles]
+            if not any(role_id in user_role_ids for role_id in allowed_role_ids):
                 await interaction.followup.send(
                     "You don't have permission to use this command.",
                     ephemeral=True
@@ -239,12 +239,34 @@ class OffTopic(red_commands.Cog):
         await ctx.send(f"Off-topic destination set to {channel.mention}")
         await ctx.tick()
 
-    @offtopic_group.command(name="setrole")
+    @offtopic_group.command(name="addrole")
     @checks.admin_or_permissions(manage_guild=True)
-    async def set_role(self, ctx: red_commands.Context, role: discord.Role):
-        """Set which role can use the /offtopic command."""
-        await self.config.guild(ctx.guild).allowed_role_id.set(role.id)
-        await ctx.send(f"Allowed role set to {role.mention}")
+    async def add_role(self, ctx: red_commands.Context, role: discord.Role):
+        """Add a role that can use the /offtopic command."""
+        async with self.config.guild(ctx.guild).allowed_role_ids() as role_ids:
+            if role.id not in role_ids:
+                role_ids.append(role.id)
+        await ctx.send(f"Added {role.mention} to allowed roles.")
+        await ctx.tick()
+
+    @offtopic_group.command(name="removerole")
+    @checks.admin_or_permissions(manage_guild=True)
+    async def remove_role(self, ctx: red_commands.Context, role: discord.Role):
+        """Remove a role from using the /offtopic command."""
+        async with self.config.guild(ctx.guild).allowed_role_ids() as role_ids:
+            if role.id in role_ids:
+                role_ids.remove(role.id)
+                await ctx.send(f"Removed {role.mention} from allowed roles.")
+                await ctx.tick()
+            else:
+                await ctx.send(f"{role.mention} was not in the allowed roles.")
+
+    @offtopic_group.command(name="clearroles")
+    @checks.admin_or_permissions(manage_guild=True)
+    async def clear_roles(self, ctx: red_commands.Context):
+        """Clear all role restrictions (allow everyone)."""
+        await self.config.guild(ctx.guild).allowed_role_ids.set([])
+        await ctx.send("Role restrictions cleared. Everyone can now use /offtopic.")
         await ctx.tick()
 
     @offtopic_group.command(name="settopic")
@@ -360,9 +382,11 @@ class OffTopic(red_commands.Cog):
         if guild_config["offtopic_channel_id"]:
             offtopic_channel = ctx.guild.get_channel(guild_config["offtopic_channel_id"])
 
-        allowed_role = None
-        if guild_config["allowed_role_id"]:
-            allowed_role = ctx.guild.get_role(guild_config["allowed_role_id"])
+        allowed_roles = []
+        for role_id in guild_config["allowed_role_ids"]:
+            role = ctx.guild.get_role(role_id)
+            if role:
+                allowed_roles.append(role)
 
         topic_count = len(guild_config["channel_topics"])
 
@@ -373,8 +397,8 @@ class OffTopic(red_commands.Cog):
             inline=True
         )
         embed.add_field(
-            name="Allowed Role",
-            value=allowed_role.mention if allowed_role else "Everyone",
+            name="Allowed Roles",
+            value=", ".join(r.mention for r in allowed_roles) if allowed_roles else "Everyone",
             inline=True
         )
         embed.add_field(
