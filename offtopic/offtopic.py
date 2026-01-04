@@ -19,7 +19,7 @@ class OffTopic(commands.Cog):
         self.log = logging.getLogger("red.offtopic")
 
         default_global = {
-            "openai_model": "gpt-4o",
+            "openai_model": "gpt-4.1",
             "openai_base_url": "https://api.openai.com/v1",
         }
 
