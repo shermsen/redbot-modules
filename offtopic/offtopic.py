@@ -59,7 +59,7 @@ class OffTopic(commands.Cog):
 
     # ==================== SLASH COMMAND ====================
 
-    @app_commands.command(name="offtopic", description="Analyze recent messages for off-topic content")
+    @app_commands.command(name="offtopic", description="Arr! Schaut ob hier wer vom Kurs abgekommen ist")
     @app_commands.guild_only()
     async def offtopic_slash(self, interaction: discord.Interaction):
         """Analyze the last 30 messages for off-topic discussion."""
@@ -76,14 +76,14 @@ class OffTopic(commands.Cog):
         if allowed_role_ids:
             user_role_ids = [r.id for r in user.roles]
             if not any(role_id in user_role_ids for role_id in allowed_role_ids):
-                await interaction.followup.send("You don't have permission to use this command.", ephemeral=True)
+                await interaction.followup.send("Arr, du hast keine Berechtigung für diesen Befehl, Landratte!", ephemeral=True)
                 return
 
         # Check configuration
         offtopic_channel_id = await self.config.guild(guild).offtopic_channel_id()
         if not offtopic_channel_id:
             await interaction.followup.send(
-                "Off-topic channel not configured. Ask an admin to run `!offtopic setchannel #channel`.",
+                "Blimey! Kein Off-Topic Kanal konfiguriert. Ein Admin muss `!offtopic setchannel #channel` ausführen.",
                 ephemeral=True
             )
             return
@@ -91,7 +91,7 @@ class OffTopic(commands.Cog):
         offtopic_channel = guild.get_channel(offtopic_channel_id)
         if not offtopic_channel:
             await interaction.followup.send(
-                "Configured off-topic channel no longer exists. Ask an admin to reconfigure.",
+                "Der Off-Topic Kanal ist über Bord gegangen! Ein Admin muss ihn neu konfigurieren.",
                 ephemeral=True
             )
             return
@@ -103,7 +103,7 @@ class OffTopic(commands.Cog):
         client = await self._get_openai_client()
         if not client:
             await interaction.followup.send(
-                "API key not configured. Ask an admin to run `[p]set api offtopic openai_api_key,YOUR_KEY`.",
+                "API-Schlüssel fehlt! Ein Admin muss `[p]set api offtopic openai_api_key,KEY` ausführen.",
                 ephemeral=True
             )
             return
@@ -112,7 +112,7 @@ class OffTopic(commands.Cog):
         tc_cog = self.bot.get_cog("TransferChannel")
         if not tc_cog:
             await interaction.followup.send(
-                "TransferChannel cog is not installed. This is required for moving messages.",
+                "TransferChannel Cog ist nicht installiert - ohne das kann ich keine Nachrichten verschieben!",
                 ephemeral=True
             )
             return
@@ -120,20 +120,20 @@ class OffTopic(commands.Cog):
         # Fetch recent messages
         messages = await self._fetch_recent_messages(channel)
         if not messages:
-            await interaction.followup.send("No recent messages found to analyze (within 3 hours).", ephemeral=True)
+            await interaction.followup.send("Keine aktuellen Nachrichten zum Analysieren gefunden (max. 3 Stunden alt).", ephemeral=True)
             return
 
         # Analyze with OpenAI
         result = await self._analyze_messages(client, messages, server_prompt)
         if result is None:
-            await interaction.followup.send("Failed to analyze messages. Please try again later.", ephemeral=True)
+            await interaction.followup.send("Konnte die Nachrichten nicht analysieren. Versuch's später nochmal!", ephemeral=True)
             return
 
         first_offtopic_id, reason = result
 
         if first_offtopic_id is None:
             self.log.info(f"Analysis result: on-topic")
-            await interaction.followup.send("No off-topic discussion found in the last 30 messages!")
+            await interaction.followup.send("Alles klar hier! Keine Off-Topic Diskussion in den letzten 30 Nachrichten gefunden. Weiter so, Matrosen! ⚓")
             return
 
         self.log.info(f"Analysis result: off-topic starting at message {first_offtopic_id} - {reason}")
@@ -169,13 +169,13 @@ class OffTopic(commands.Cog):
         timeout_minutes = vote_timeout // 60
 
         summary = (
-            f"**Off-Topic Detection Results**\n\n"
-            f"The conversation went off-topic starting with this message:\n\n"
+            f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
+            f"Ab dieser Nachricht ging's los:\n\n"
             f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
-            f"**Reason:** {reason}\n\n"
-            f"This will move **{move_count} message{'s' if move_count != 1 else ''}** to {offtopic_channel.mention}\n\n"
-            f"React :thumbsup: to move | React :thumbsdown: to dismiss\n"
-            f"({vote_threshold} votes needed, expires in {timeout_minutes} minutes)"
+            f"**Grund:** {reason}\n\n"
+            f"**{move_count} Nachricht{'en' if move_count != 1 else ''}** würden nach {offtopic_channel.mention} verfrachtet\n\n"
+            f"👍 = Ab in die Bilge damit! | 👎 = Lass mal stecken\n"
+            f"({vote_threshold} Stimmen nötig, läuft ab in {timeout_minutes} Min.)"
         )
 
         summary_message = await interaction.followup.send(summary, wait=True)
@@ -185,9 +185,17 @@ class OffTopic(commands.Cog):
             channel, summary_message, vote_threshold, vote_timeout
         )
 
+        # Base summary without voting instructions
+        base_summary = (
+            f"**🏴‍☠️ Arr, hier ist jemand vom Kurs abgekommen!**\n\n"
+            f"Ab dieser Nachricht ging's los:\n\n"
+            f"> **{first_offtopic_msg.author.display_name}**: {content_preview}\n\n"
+            f"**Grund:** {reason}\n\n"
+        )
+
         if vote_result == "approve":
             self.log.info(f"Vote passed: approved")
-            await summary_message.edit(content=f"Vote passed! Moving messages to {offtopic_channel.mention}...")
+            await summary_message.edit(content=base_summary + f"⏳ Wird nach {offtopic_channel.mention} verfrachtet...")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
                 interaction, first_offtopic_msg, offtopic_channel, tc_cog
@@ -195,24 +203,17 @@ class OffTopic(commands.Cog):
             if result:
                 count, jump_url = result
                 self.log.info(f"Transferred {count} messages to #{offtopic_channel.name}")
-                await summary_message.edit(content=f"{count} messages moved to {offtopic_channel.mention}: {jump_url}")
+                await summary_message.edit(content=base_summary + f"✅ **{count} Nachrichten nach {offtopic_channel.mention} verschifft!** {jump_url}")
             else:
-                await summary_message.edit(content="Failed to move messages.")
+                await summary_message.edit(content=base_summary + "❌ Arr, da ist was schiefgelaufen beim Verschieben!")
 
         elif vote_result == "reject":
             self.log.info(f"Vote passed: rejected")
-            try:
-                await summary_message.delete()
-            except discord.HTTPException:
-                pass
-            await channel.send("Off-topic report dismissed by vote.", delete_after=10)
+            await summary_message.edit(content=base_summary + "❌ **Die Crew hat abgestimmt: Bleibt alles hier!**")
 
         else:  # timeout
             self.log.info(f"Vote timed out")
-            try:
-                await summary_message.delete()
-            except discord.HTTPException:
-                pass
+            await summary_message.edit(content=base_summary + "⏰ **Abstimmung abgelaufen - keinen interessiert's wohl.**")
 
     # ==================== ADMIN COMMANDS (PREFIX ONLY) ====================
 
