@@ -187,6 +187,7 @@ class OffTopic(commands.Cog):
 
         if vote_result == "approve":
             self.log.info(f"Vote passed: approved")
+            await summary_message.edit(content=f"Vote passed! Moving messages to {offtopic_channel.mention}...")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
                 interaction, first_offtopic_msg, offtopic_channel, tc_cog
@@ -194,11 +195,9 @@ class OffTopic(commands.Cog):
             if result:
                 count, jump_url = result
                 self.log.info(f"Transferred {count} messages to #{offtopic_channel.name}")
-                await channel.send(f"{count} messages moved to {offtopic_channel.mention}: {jump_url}")
-            try:
-                await summary_message.delete()
-            except discord.HTTPException:
-                pass
+                await summary_message.edit(content=f"{count} messages moved to {offtopic_channel.mention}: {jump_url}")
+            else:
+                await summary_message.edit(content="Failed to move messages.")
 
         elif vote_result == "reject":
             self.log.info(f"Vote passed: rejected")
@@ -522,6 +521,9 @@ Find the FIRST message where the conversation derailed (if any)."""
                 messages_to_transfer.append(msg)
 
             count = len(messages_to_transfer)
+
+            # TransferChannel reverses the list, so pass newest-first
+            messages_to_transfer.reverse()
 
             # Use TransferChannel's transfer_messages method directly
             await tc_cog.transfer_messages(
