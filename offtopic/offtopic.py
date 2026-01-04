@@ -100,7 +100,8 @@ class OffTopic(commands.Cog):
                 )
                 return
             # Check if user has access to the custom destination channel
-            if not destination_channel.permissions_for(user).view_channel:
+            perms = destination_channel.permissions_for(user)
+            if not perms.view_channel or not perms.send_messages:
                 await interaction.followup.send(
                     "Arr, du hast keinen Zugang zu diesem Kanal, Landratte!",
                     ephemeral=True
