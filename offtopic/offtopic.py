@@ -99,6 +99,13 @@ class OffTopic(commands.Cog):
                     ephemeral=True
                 )
                 return
+            # Check if user has access to the custom destination channel
+            if not destination_channel.permissions_for(user).view_channel:
+                await interaction.followup.send(
+                    "Arr, du hast keinen Zugang zu diesem Kanal, Landratte!",
+                    ephemeral=True
+                )
+                return
         else:
             if not default_offtopic_id:
                 await interaction.followup.send(
