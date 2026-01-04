@@ -237,6 +237,7 @@ class OffTopic(red_commands.Cog):
         """Set the destination channel for off-topic messages."""
         await self.config.guild(ctx.guild).offtopic_channel_id.set(channel.id)
         await ctx.send(f"Off-topic destination set to {channel.mention}")
+        await ctx.tick()
 
     @offtopic_group.command(name="setrole")
     @checks.admin_or_permissions(manage_guild=True)
@@ -244,6 +245,7 @@ class OffTopic(red_commands.Cog):
         """Set which role can use the /offtopic command."""
         await self.config.guild(ctx.guild).allowed_role_id.set(role.id)
         await ctx.send(f"Allowed role set to {role.mention}")
+        await ctx.tick()
 
     @offtopic_group.command(name="settopic")
     @checks.admin_or_permissions(manage_guild=True)
@@ -278,6 +280,7 @@ class OffTopic(red_commands.Cog):
             current_topics[str(channel.id)] = msg.content
             await self.config.guild(ctx.guild).channel_topics.set(current_topics)
             await ctx.send(f"Topic set for {channel.mention}:\n> {msg.content}")
+            await ctx.tick()
         except asyncio.TimeoutError:
             await ctx.send("Timed out. Please try again.")
 
@@ -325,6 +328,7 @@ class OffTopic(red_commands.Cog):
             del current_topics[str(channel.id)]
             await self.config.guild(ctx.guild).channel_topics.set(current_topics)
             await ctx.send(f"Topic removed for {channel.mention}.")
+            await ctx.tick()
         else:
             await ctx.send(f"No topic was configured for {channel.mention}.")
 
@@ -334,6 +338,7 @@ class OffTopic(red_commands.Cog):
         """Set the OpenAI model to use."""
         await self.config.openai_model.set(model)
         await ctx.send(f"OpenAI model set to `{model}`")
+        await ctx.tick()
 
     @offtopic_group.command(name="setbaseurl")
     @checks.is_owner()
@@ -342,6 +347,7 @@ class OffTopic(red_commands.Cog):
         await self.config.openai_base_url.set(url)
         self._reset_client()
         await ctx.send(f"OpenAI base URL set to `{url}`")
+        await ctx.tick()
 
     @offtopic_group.command(name="settings")
     @checks.admin_or_permissions(manage_guild=True)
