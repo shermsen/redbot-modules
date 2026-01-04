@@ -290,8 +290,7 @@ class OffTopic(commands.Cog):
 
         if vote_result == "approve":
             self.log.info(f"Vote passed: approved")
-            # Summary message will be deleted with transferred messages, so send new status
-            status_msg = await channel.send(f"⏳ Wird nach {destination_channel.mention} verschoben...")
+            await summary_message.edit(content=base_summary + f"⏳ Wird nach {destination_channel.mention} verschoben...")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
                 interaction, first_offtopic_msg, destination_channel, tc_cog
@@ -300,11 +299,11 @@ class OffTopic(commands.Cog):
                 count, jump_url = result
                 self.log.info(f"Transferred {count} messages to #{destination_channel.name}")
                 if is_custom_destination:
-                    await status_msg.edit(content=f"📦 **{count} Nachrichten nach {destination_channel.mention} verschoben!** {jump_url}")
+                    await summary_message.edit(content=base_summary + f"✅ **{count} Nachrichten nach {destination_channel.mention} verschoben!** {jump_url}")
                 else:
-                    await status_msg.edit(content=f"🏴‍☠️ **{count} Nachrichten nach {destination_channel.mention} verschifft!** {jump_url}\n\n🔨 Bleibt beim Thema - sonst geht's über die Planke!")
+                    await summary_message.edit(content=base_summary + f"✅ **{count} Nachrichten nach {destination_channel.mention} verschifft!** {jump_url}\n\n🔨 Bleibt beim Thema - sonst geht's über die Planke!")
             else:
-                await status_msg.edit(content="❌ Arr, da ist was schiefgelaufen beim Verschieben!")
+                await summary_message.edit(content=base_summary + "❌ Beim Verschieben ist was schiefgelaufen!")
 
         elif vote_result == "reject":
             self.log.info(f"Vote passed: rejected")
@@ -615,10 +614,16 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
         source = first_offtopic_msg.channel
 
         try:
-            # Collect messages to transfer (we need to count them before transfer)
-            messages_to_transfer = [first_offtopic_msg]
+            # Collect messages to transfer (excluding bot messages)
+            messages_to_transfer = []
+            if not first_offtopic_msg.author.bot:
+                messages_to_transfer.append(first_offtopic_msg)
             async for msg in source.history(after=first_offtopic_msg, oldest_first=True):
-                messages_to_transfer.append(msg)
+                if not msg.author.bot:
+                    messages_to_transfer.append(msg)
+
+            if not messages_to_transfer:
+                return None
 
             count = len(messages_to_transfer)
 
@@ -636,8 +641,6 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
 
             # Delete originals
             for msg in messages_to_transfer:
-                if msg.author.bot:
-                    continue  # Don't delete bot messages (like status message)
                 try:
                     await msg.delete()
                 except discord.HTTPException:
