@@ -410,26 +410,26 @@ class OffTopic(commands.Cog):
 
         messages_text = "\n".join(formatted)
 
-        system_prompt = f"""You analyze Discord messages to identify where a conversation completely derailed.
+        system_prompt = f"""Du analysierst Discord-Nachrichten um zu erkennen, wo eine Konversation entgleist ist.
 
-Server context: {server_prompt}
+Server-Kontext: {server_prompt}
 
-You will receive a list of messages in chronological order.
-Find the FIRST message where the conversation started derailing into off-topic territory.
-Look for: unrelated arguments, personal fights, extended joke chains, random nonsense, or discussions that have nothing to do with the server's purpose.
+Du erhältst eine Liste von Nachrichten in chronologischer Reihenfolge.
+Finde die ERSTE Nachricht, bei der die Konversation ins Off-Topic abgedriftet ist.
+Achte auf: zusammenhangslose Streitereien, persönliche Angriffe, ausufernde Witz-Ketten, random Nonsens, oder Diskussionen die nichts mit dem Server-Thema zu tun haben.
 
-Be lenient - brief jokes or small tangents are fine. Only flag when the conversation has truly gone off the rails.
+Sei tolerant - kurze Witze oder kleine Abschweifungen sind okay. Nur flaggen wenn die Konversation wirklich entgleist ist.
 
-Return ONLY a JSON object with this structure:
-{{"first_offtopic_id": "message_id", "reason": "brief explanation of why this derailed"}}
-If the conversation is fine, return: {{"first_offtopic_id": null, "reason": "Conversation is on-topic"}}
+Antworte NUR mit einem JSON-Objekt in diesem Format:
+{{"first_offtopic_id": "message_id", "reason": "kurze Erklärung auf Deutsch warum das Off-Topic ist"}}
+Wenn alles in Ordnung ist: {{"first_offtopic_id": null, "reason": "Alles on-topic"}}
 
-IMPORTANT: Return ONLY valid JSON, no other text."""
+WICHTIG: Antworte NUR mit validem JSON, kein anderer Text. Der reason MUSS auf Deutsch sein."""
 
-        user_prompt = f"""Messages (oldest first):
+        user_prompt = f"""Nachrichten (älteste zuerst):
 {messages_text}
 
-Find the FIRST message where the conversation derailed (if any)."""
+Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden)."""
 
         self.log.debug(f"OpenAI request - model: {model}")
         self.log.debug(f"System prompt: {system_prompt}")
@@ -490,9 +490,9 @@ Find the FIRST message where the conversation derailed (if any)."""
             thumbs_up = thumbs_down = 0
             for reaction in msg.reactions:
                 if str(reaction.emoji) == "\N{THUMBS UP SIGN}":
-                    thumbs_up = reaction.count - 1  # Subtract bot's reaction
+                    thumbs_up = reaction.count
                 elif str(reaction.emoji) == "\N{THUMBS DOWN SIGN}":
-                    thumbs_down = reaction.count - 1
+                    thumbs_down = reaction.count
 
             self.log.debug(f"Vote count: {thumbs_up} approve, {thumbs_down} reject")
 
