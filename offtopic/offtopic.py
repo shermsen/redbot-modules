@@ -422,6 +422,10 @@ IMPORTANT: Return ONLY valid JSON, no other text."""
 
 Find the FIRST message where the conversation derailed (if any)."""
 
+        self.log.debug(f"OpenAI request - model: {model}")
+        self.log.debug(f"System prompt: {system_prompt}")
+        self.log.debug(f"User prompt: {user_prompt}")
+
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -434,6 +438,7 @@ Find the FIRST message where the conversation derailed (if any)."""
             )
 
             content = response.choices[0].message.content.strip()
+            self.log.debug(f"OpenAI response: {content}")
 
             # Parse JSON response
             # Try to extract JSON if wrapped in markdown
