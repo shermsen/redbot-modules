@@ -636,6 +636,8 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
 
             # Delete originals
             for msg in messages_to_transfer:
+                if msg.author.bot:
+                    continue  # Don't delete bot messages (like status message)
                 try:
                     await msg.delete()
                 except discord.HTTPException:
