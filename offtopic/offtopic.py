@@ -10,6 +10,23 @@ import logging
 import re
 
 
+# Context menu command (must be defined outside the class for Red)
+@app_commands.context_menu(name="Off-Topic ab hier")
+async def offtopic_context_menu(interaction: discord.Interaction, message: discord.Message):
+    """Analyze messages for off-topic discussion starting from this message."""
+    if not interaction.guild:
+        await interaction.response.send_message("Nur in Servern verfügbar!", ephemeral=True)
+        return
+
+    cog = interaction.client.get_cog("OffTopic")
+    if not cog:
+        await interaction.response.send_message("OffTopic Cog nicht geladen!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    await cog._run_offtopic_analysis(interaction, message, None)
+
+
 class OffTopic(commands.Cog):
     """Detects off-topic discussions using AI and moves them to a designated channel."""
 
@@ -37,18 +54,11 @@ class OffTopic(commands.Cog):
 
     async def cog_load(self):
         """Called when the cog is loaded."""
-        # Add context menu command
-        self.context_menu = app_commands.ContextMenu(
-            name="Off-Topic ab hier",
-            callback=self.offtopic_context_callback,
-        )
-        self.bot.tree.add_command(self.context_menu)
+        pass
 
     async def cog_unload(self):
         """Cleanup when cog is unloaded."""
         self._client = None
-        # Remove context menu command
-        self.bot.tree.remove_command(self.context_menu.name, type=self.context_menu.type)
 
     async def _get_openai_client(self) -> Optional[AsyncOpenAI]:
         """Get or create OpenAI client."""
@@ -117,16 +127,6 @@ class OffTopic(commands.Cog):
                 return
 
         await self._run_offtopic_analysis(interaction, start_message, ziel)
-
-    # ==================== CONTEXT MENU ====================
-
-    async def offtopic_context_callback(self, interaction: discord.Interaction, message: discord.Message):
-        """Context menu callback for off-topic analysis."""
-        if not interaction.guild:
-            await interaction.response.send_message("Nur in Servern verfügbar!", ephemeral=True)
-            return
-        await interaction.response.defer()
-        await self._run_offtopic_analysis(interaction, message, None)
 
     # ==================== CORE LOGIC ====================
 
