@@ -587,6 +587,21 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
 
             thumbs_up = thumbs_down = 0
             for reaction in msg.reactions:
+                emoji_name = getattr(reaction.emoji, 'name', str(reaction.emoji))
+
+                # Admin override emojis
+                if emoji_name in ['SadgeBusiness', 'Okay', 'subi', 'grrr', 'HYPERS']:
+                    async for user in reaction.users():
+                        if not user.bot and user.guild_permissions.administrator:
+                            self.log.info(f"Admin {user} forced approve with :{emoji_name}:")
+                            return "approve"
+                elif emoji_name in ['unsure', 'BRUH']:
+                    async for user in reaction.users():
+                        if not user.bot and user.guild_permissions.administrator:
+                            self.log.info(f"Admin {user} forced reject with :{emoji_name}:")
+                            return "reject"
+
+                # Regular vote counting
                 if str(reaction.emoji) == "\N{THUMBS UP SIGN}":
                     thumbs_up = reaction.count
                 elif str(reaction.emoji) == "\N{THUMBS DOWN SIGN}":
