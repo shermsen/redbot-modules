@@ -37,11 +37,18 @@ class OffTopic(commands.Cog):
 
     async def cog_load(self):
         """Called when the cog is loaded."""
-        pass
+        # Add context menu command
+        self.context_menu = app_commands.ContextMenu(
+            name="Off-Topic ab hier",
+            callback=self.offtopic_context_callback,
+        )
+        self.bot.tree.add_command(self.context_menu)
 
-    def cog_unload(self):
+    async def cog_unload(self):
         """Cleanup when cog is unloaded."""
         self._client = None
+        # Remove context menu command
+        self.bot.tree.remove_command(self.context_menu.name, type=self.context_menu.type)
 
     async def _get_openai_client(self) -> Optional[AsyncOpenAI]:
         """Get or create OpenAI client."""
@@ -113,10 +120,11 @@ class OffTopic(commands.Cog):
 
     # ==================== CONTEXT MENU ====================
 
-    @app_commands.context_menu(name="Off-Topic ab hier")
-    @app_commands.guild_only()
-    async def offtopic_context(self, interaction: discord.Interaction, message: discord.Message):
-        """Analyze messages for off-topic discussion starting from this message."""
+    async def offtopic_context_callback(self, interaction: discord.Interaction, message: discord.Message):
+        """Context menu callback for off-topic analysis."""
+        if not interaction.guild:
+            await interaction.response.send_message("Nur in Servern verfügbar!", ephemeral=True)
+            return
         await interaction.response.defer()
         await self._run_offtopic_analysis(interaction, message, None)
 
