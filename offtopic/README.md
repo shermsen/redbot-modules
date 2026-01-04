@@ -6,7 +6,7 @@ Detects off-topic discussions using AI and moves them to a designated channel.
 
 1. A user runs `/offtopic` in a channel
 2. The bot fetches the last 30 messages (within 3 hours)
-3. OpenAI analyzes the messages to find where the conversation went off-topic
+3. OpenAI analyzes the messages to find where the conversation derailed
 4. If off-topic content is found, a summary is posted with voting reactions
 5. If enough users vote to approve, the messages are moved to the off-topic channel
 
@@ -30,6 +30,12 @@ Detects off-topic discussions using AI and moves them to a designated channel.
    [p]load offtopic
    ```
 
+3. Enable and sync slash commands:
+   ```
+   [p]slash enable offtopic
+   [p]slash sync
+   ```
+
 ## Setup
 
 ### 1. Set OpenAI API Key
@@ -45,16 +51,15 @@ Detects off-topic discussions using AI and moves them to a designated channel.
 ### 3. Set Allowed Role (Optional)
 Restrict who can use the `/offtopic` command:
 ```
-!offtopic setrole @Moderator
+!offtopic addrole @Moderator
 ```
 If not set, everyone can use the command.
 
-### 4. Configure Channel Topics
-For each channel you want to monitor, set its topic:
+### 4. Customize Server Prompt (Optional)
+The default prompt is configured for usenet/warez/piracy servers. Customize it for your server:
 ```
-!offtopic settopic #general
+!offtopic setprompt
 ```
-The bot will prompt you to describe what the channel is about.
 
 ## Usage
 
@@ -74,11 +79,11 @@ When off-topic content is found:
 |---------|-------------|
 | `!offtopic settings` | View current configuration |
 | `!offtopic setchannel #channel` | Set the off-topic destination channel |
-| `!offtopic setrole @role` | Set which role can use /offtopic |
-| `!offtopic settopic [#channel]` | Set a channel's topic description |
-| `!offtopic gettopic [#channel]` | View a channel's topic |
-| `!offtopic listtopics` | List all configured topics |
-| `!offtopic removetopic #channel` | Remove a channel's topic config |
+| `!offtopic addrole @role` | Add a role that can use /offtopic |
+| `!offtopic removerole @role` | Remove a role |
+| `!offtopic clearroles` | Allow everyone to use /offtopic |
+| `!offtopic setprompt` | Set server-wide detection prompt |
+| `!offtopic getprompt` | View current prompt |
 
 ### Owner-Only Commands
 
@@ -87,20 +92,15 @@ When off-topic content is found:
 | `!offtopic setmodel <model>` | Change AI model (default: gpt-4o) |
 | `!offtopic setbaseurl <url>` | Set custom OpenAI API endpoint |
 
-## Configuration Tips
+## How Detection Works
 
-### Writing Good Channel Topics
-The better your topic description, the more accurate the detection will be.
+The AI looks for conversations that have completely derailed:
+- Unrelated arguments or personal fights
+- Extended joke chains that went too far
+- Random nonsense unrelated to the server's purpose
+- Discussions that have nothing to do with the server topics
 
-**Good examples:**
-- "Technical discussions about Python programming, debugging, and code reviews"
-- "Gaming news, game recommendations, and discussions about video games"
-- "Announcements and updates about server events - no general chat"
-
-**Bad examples:**
-- "general"
-- "chat"
-- "stuff"
+Brief jokes or small tangents are ignored - only truly derailed conversations are flagged.
 
 ## Troubleshooting
 
@@ -110,8 +110,8 @@ Install it from AAA3A-cogs (see Installation section).
 ### "API key not configured"
 Run `[p]set api offtopic openai_api_key,YOUR_KEY` with your OpenAI API key.
 
-### "No topic configured for this channel"
-Run `!offtopic settopic` in the channel and describe what it's for.
+### Slash command not appearing
+Run `[p]slash enable offtopic` then `[p]slash sync`.
 
 ### Voting never passes
 Check if enough unique users are voting. Bot reactions don't count.

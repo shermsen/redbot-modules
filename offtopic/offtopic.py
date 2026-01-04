@@ -27,7 +27,7 @@ class OffTopic(commands.Cog):
             "allowed_role_ids": [],
             "vote_timeout": 300,
             "vote_threshold": 5,
-            "channel_topics": {},
+            "server_prompt": "This Discord server is about usenet, warez, torrents, automation (Sonarr/Radarr/SABnzbd), indexers, and general IT/piracy topics. Detect when conversations completely derail into unrelated arguments, personal fights, extended off-topic jokes, or random nonsense that has nothing to do with the server's purpose.",
         }
 
         self.config.register_global(**default_global)
@@ -94,15 +94,8 @@ class OffTopic(commands.Cog):
             )
             return
 
-        # Check channel topic
-        channel_topics = await self.config.guild(guild).channel_topics()
-        channel_topic = channel_topics.get(str(channel.id))
-        if not channel_topic:
-            await interaction.followup.send(
-                f"No topic configured for {channel.mention}. Ask an admin to run `!offtopic settopic`.",
-                ephemeral=True
-            )
-            return
+        # Get server prompt
+        server_prompt = await self.config.guild(guild).server_prompt()
 
         # Check OpenAI API key
         client = await self._get_openai_client()
@@ -129,7 +122,7 @@ class OffTopic(commands.Cog):
             return
 
         # Analyze with OpenAI
-        result = await self._analyze_messages(client, messages, channel_topic)
+        result = await self._analyze_messages(client, messages, server_prompt)
         if result is None:
             await interaction.followup.send("Failed to analyze messages. Please try again later.", ephemeral=True)
             return
@@ -259,90 +252,40 @@ class OffTopic(commands.Cog):
         await ctx.send("Role restrictions cleared. Everyone can now use /offtopic.")
         await ctx.tick()
 
-    @offtopic_admin.command(name="settopic")
+    @offtopic_admin.command(name="setprompt")
     @checks.admin_or_permissions(manage_guild=True)
-    async def set_topic(self, ctx: commands.Context, channel: discord.TextChannel = None):
-        """Set a channel's topic description interactively."""
-        channel = channel or ctx.channel
-        current_topics = await self.config.guild(ctx.guild).channel_topics()
-        current = current_topics.get(str(channel.id))
+    async def set_prompt(self, ctx: commands.Context):
+        """Set the server-wide prompt that describes what this server is about."""
+        current = await self.config.guild(ctx.guild).server_prompt()
 
-        if current:
-            await ctx.send(
-                f"Current topic for {channel.mention}:\n> {current}\n\n"
-                f"Reply with the new topic description (or 'cancel' to abort):"
-            )
-        else:
-            await ctx.send(
-                f"Setting topic for {channel.mention}\n\n"
-                f"**What is this channel about?**\n"
-                f"Example: 'Technical discussions about Python and coding projects'\n\n"
-                f"Reply with the topic description:"
-            )
+        await ctx.send(
+            f"**Current prompt:**\n> {current}\n\n"
+            f"Reply with the new prompt describing what this server is about, "
+            f"and what kind of discussions should be considered off-topic.\n\n"
+            f"(or 'cancel' to abort)"
+        )
 
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
         try:
-            msg = await self.bot.wait_for('message', check=check, timeout=60)
+            msg = await self.bot.wait_for('message', check=check, timeout=120)
             if msg.content.lower() == 'cancel':
                 await ctx.send("Cancelled.")
                 return
 
-            current_topics[str(channel.id)] = msg.content
-            await self.config.guild(ctx.guild).channel_topics.set(current_topics)
-            await ctx.send(f"Topic set for {channel.mention}:\n> {msg.content}")
+            await self.config.guild(ctx.guild).server_prompt.set(msg.content)
+            await ctx.send(f"Server prompt updated:\n> {msg.content}")
             await ctx.tick()
         except asyncio.TimeoutError:
             await ctx.send("Timed out. Please try again.")
 
-    @offtopic_admin.command(name="gettopic")
+    @offtopic_admin.command(name="getprompt")
     @checks.admin_or_permissions(manage_guild=True)
-    async def get_topic(self, ctx: commands.Context, channel: discord.TextChannel = None):
-        """View a channel's configured topic."""
-        channel = channel or ctx.channel
-        current_topics = await self.config.guild(ctx.guild).channel_topics()
-        topic = current_topics.get(str(channel.id))
-
-        if topic:
-            await ctx.send(f"Topic for {channel.mention}:\n> {topic}")
-        else:
-            await ctx.send(f"No topic configured for {channel.mention}.")
-
-    @offtopic_admin.command(name="listtopics")
-    @checks.admin_or_permissions(manage_guild=True)
-    async def list_topics(self, ctx: commands.Context):
-        """List all configured channel topics."""
-        current_topics = await self.config.guild(ctx.guild).channel_topics()
-
-        if not current_topics:
-            await ctx.send("No channel topics configured.")
-            return
-
-        lines = []
-        for channel_id, topic in current_topics.items():
-            channel = ctx.guild.get_channel(int(channel_id))
-            if channel:
-                preview = topic[:50] + "..." if len(topic) > 50 else topic
-                lines.append(f"{channel.mention}: {preview}")
-            else:
-                lines.append(f"<deleted channel {channel_id}>: {topic[:50]}...")
-
-        await ctx.send("**Configured Topics:**\n" + "\n".join(lines))
-
-    @offtopic_admin.command(name="removetopic")
-    @checks.admin_or_permissions(manage_guild=True)
-    async def remove_topic(self, ctx: commands.Context, channel: discord.TextChannel):
-        """Remove a channel's topic configuration."""
-        current_topics = await self.config.guild(ctx.guild).channel_topics()
-
-        if str(channel.id) in current_topics:
-            del current_topics[str(channel.id)]
-            await self.config.guild(ctx.guild).channel_topics.set(current_topics)
-            await ctx.send(f"Topic removed for {channel.mention}.")
-            await ctx.tick()
-        else:
-            await ctx.send(f"No topic was configured for {channel.mention}.")
+    async def get_prompt(self, ctx: commands.Context):
+        """View the current server prompt."""
+        prompt = await self.config.guild(ctx.guild).server_prompt()
+        await ctx.send(f"**Server prompt:**\n> {prompt}")
 
     @offtopic_admin.command(name="setmodel")
     @checks.is_owner()
@@ -378,7 +321,8 @@ class OffTopic(commands.Cog):
             if role:
                 allowed_roles.append(role)
 
-        topic_count = len(guild_config["channel_topics"])
+        server_prompt = guild_config.get("server_prompt", "")
+        prompt_preview = server_prompt[:80] + "..." if len(server_prompt) > 80 else server_prompt
 
         embed = discord.Embed(title="Off-Topic Settings", color=await ctx.embed_color())
         embed.add_field(
@@ -392,9 +336,9 @@ class OffTopic(commands.Cog):
             inline=True
         )
         embed.add_field(
-            name="Configured Topics",
-            value=f"{topic_count} channel(s)",
-            inline=True
+            name="Server Prompt",
+            value=prompt_preview or "Not set",
+            inline=False
         )
         embed.add_field(
             name="Vote Threshold",
@@ -444,7 +388,7 @@ class OffTopic(commands.Cog):
         return list(reversed(messages))
 
     async def _analyze_messages(
-        self, client: AsyncOpenAI, messages: List[discord.Message], channel_topic: str
+        self, client: AsyncOpenAI, messages: List[discord.Message], server_prompt: str
     ) -> Optional[Tuple[Optional[str], str]]:
         """Analyze messages with OpenAI to find off-topic content."""
         model = await self.config.openai_model()
@@ -457,21 +401,26 @@ class OffTopic(commands.Cog):
 
         messages_text = "\n".join(formatted)
 
-        system_prompt = f"""You analyze Discord messages to identify where a conversation went off-topic.
-The channel's topic is: {channel_topic}
+        system_prompt = f"""You analyze Discord messages to identify where a conversation completely derailed.
+
+Server context: {server_prompt}
 
 You will receive a list of messages in chronological order.
-Find the FIRST message where the conversation started going off-topic.
+Find the FIRST message where the conversation started derailing into off-topic territory.
+Look for: unrelated arguments, personal fights, extended joke chains, random nonsense, or discussions that have nothing to do with the server's purpose.
+
+Be lenient - brief jokes or small tangents are fine. Only flag when the conversation has truly gone off the rails.
+
 Return ONLY a JSON object with this structure:
-{{"first_offtopic_id": "message_id", "reason": "brief explanation of why this derailed the topic"}}
-If all messages are on-topic, return: {{"first_offtopic_id": null, "reason": "All messages are on-topic"}}
+{{"first_offtopic_id": "message_id", "reason": "brief explanation of why this derailed"}}
+If the conversation is fine, return: {{"first_offtopic_id": null, "reason": "Conversation is on-topic"}}
 
 IMPORTANT: Return ONLY valid JSON, no other text."""
 
         user_prompt = f"""Messages (oldest first):
 {messages_text}
 
-Find the FIRST message where the conversation went off-topic for a channel about: {channel_topic}"""
+Find the FIRST message where the conversation derailed (if any)."""
 
         try:
             response = await client.chat.completions.create(
