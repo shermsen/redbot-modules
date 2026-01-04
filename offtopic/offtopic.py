@@ -195,7 +195,8 @@ class OffTopic(commands.Cog):
 
         if vote_result == "approve":
             self.log.info(f"Vote passed: approved")
-            await summary_message.edit(content=base_summary + f"⏳ Wird nach {offtopic_channel.mention} verfrachtet...")
+            # Summary message will be deleted with transferred messages, so send new status
+            status_msg = await channel.send(f"⏳ Wird nach {offtopic_channel.mention} verfrachtet...")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
                 interaction, first_offtopic_msg, offtopic_channel, tc_cog
@@ -203,9 +204,9 @@ class OffTopic(commands.Cog):
             if result:
                 count, jump_url = result
                 self.log.info(f"Transferred {count} messages to #{offtopic_channel.name}")
-                await summary_message.edit(content=base_summary + f"✅ **{count} Nachrichten nach {offtopic_channel.mention} verschifft!** {jump_url}")
+                await status_msg.edit(content=f"🏴‍☠️ **{count} Nachrichten nach {offtopic_channel.mention} verschifft!** {jump_url}\n\n🔨 Bleibt beim Thema - sonst geht's über die Planke!")
             else:
-                await summary_message.edit(content=base_summary + "❌ Arr, da ist was schiefgelaufen beim Verschieben!")
+                await status_msg.edit(content="❌ Arr, da ist was schiefgelaufen beim Verschieben!")
 
         elif vote_result == "reject":
             self.log.info(f"Vote passed: rejected")
