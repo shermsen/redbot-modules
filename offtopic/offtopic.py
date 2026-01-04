@@ -57,11 +57,11 @@ class OffTopic(commands.Cog):
         """Reset client to pick up new config."""
         self._client = None
 
-    # ==================== SLASH COMMAND ====================
+    # ==================== MAIN COMMAND GROUP ====================
 
-    @commands.hybrid_command(name="checkofftopic", description="Analyze recent messages for off-topic content")
+    @commands.hybrid_group(name="offtopic", fallback="check")
     @commands.guild_only()
-    async def offtopic_slash(self, ctx: commands.Context):
+    async def offtopic_group(self, ctx: commands.Context):
         """Analyze the last 30 messages for off-topic discussion."""
         await ctx.defer()
 
@@ -213,13 +213,7 @@ class OffTopic(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    # ==================== ADMIN COMMANDS ====================
-
-    @commands.group(name="offtopic", invoke_without_command=True)
-    @checks.admin_or_permissions(manage_guild=True)
-    async def offtopic_group(self, ctx: commands.Context):
-        """Off-topic detection configuration."""
-        await ctx.send_help(ctx.command)
+    # ==================== ADMIN SUBCOMMANDS ====================
 
     @offtopic_group.command(name="setchannel")
     @checks.admin_or_permissions(manage_guild=True)
