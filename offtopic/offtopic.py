@@ -69,6 +69,8 @@ class OffTopic(commands.Cog):
         channel = interaction.channel
         user = interaction.user
 
+        self.log.info(f"/offtopic used by {user} ({user.id}) in #{channel.name} ({channel.id})")
+
         # Check if user has required role
         allowed_role_ids = await self.config.guild(guild).allowed_role_ids()
         if allowed_role_ids:
@@ -130,8 +132,11 @@ class OffTopic(commands.Cog):
         first_offtopic_id, reason = result
 
         if first_offtopic_id is None:
+            self.log.info(f"Analysis result: on-topic")
             await interaction.followup.send("No off-topic discussion found in the last 30 messages!")
             return
+
+        self.log.info(f"Analysis result: off-topic starting at message {first_offtopic_id} - {reason}")
 
         # Find the message object
         first_offtopic_msg = None
@@ -181,12 +186,14 @@ class OffTopic(commands.Cog):
         )
 
         if vote_result == "approve":
+            self.log.info(f"Vote passed: approved")
             # Transfer and delete messages
             result = await self._transfer_messages_from_interaction(
                 interaction, first_offtopic_msg, offtopic_channel, tc_cog
             )
             if result:
                 count, jump_url = result
+                self.log.info(f"Transferred {count} messages to #{offtopic_channel.name}")
                 await channel.send(f"{count} messages moved to {offtopic_channel.mention}: {jump_url}")
             try:
                 await summary_message.delete()
@@ -194,6 +201,7 @@ class OffTopic(commands.Cog):
                 pass
 
         elif vote_result == "reject":
+            self.log.info(f"Vote passed: rejected")
             try:
                 await summary_message.delete()
             except discord.HTTPException:
@@ -201,6 +209,7 @@ class OffTopic(commands.Cog):
             await channel.send("Off-topic report dismissed by vote.", delete_after=10)
 
         else:  # timeout
+            self.log.info(f"Vote timed out")
             try:
                 await summary_message.delete()
             except discord.HTTPException:
@@ -469,6 +478,7 @@ Find the FIRST message where the conversation derailed (if any)."""
         await summary_message.add_reaction("\N{THUMBS UP SIGN}")
         await summary_message.add_reaction("\N{THUMBS DOWN SIGN}")
 
+        self.log.info(f"Voting started (threshold: {threshold}, timeout: {timeout}s)")
         end_time = datetime.now(timezone.utc) + timedelta(seconds=timeout)
 
         while datetime.now(timezone.utc) < end_time:
@@ -483,6 +493,8 @@ Find the FIRST message where the conversation derailed (if any)."""
                     thumbs_up = reaction.count - 1  # Subtract bot's reaction
                 elif str(reaction.emoji) == "\N{THUMBS DOWN SIGN}":
                     thumbs_down = reaction.count - 1
+
+            self.log.debug(f"Vote count: {thumbs_up} approve, {thumbs_down} reject")
 
             if thumbs_up >= threshold:
                 return "approve"
