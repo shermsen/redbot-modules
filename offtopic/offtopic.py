@@ -75,11 +75,65 @@ class OffTopic(commands.Cog):
         """Analyze messages for off-topic discussion."""
         await interaction.response.defer()
 
+        channel = interaction.channel
+
+        # Parse message link or ID if provided
+        start_message = None
+        if nachricht:
+            msg_id = None
+            # Try message URL first
+            match = re.match(r'https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)', nachricht)
+            if match:
+                msg_guild_id, msg_channel_id, msg_id = map(int, match.groups())
+                if msg_channel_id != channel.id:
+                    await interaction.followup.send(
+                        "Die Nachricht muss aus diesem Kanal sein!",
+                        ephemeral=True
+                    )
+                    return
+            # Try plain message ID
+            elif nachricht.isdigit():
+                msg_id = int(nachricht)
+            else:
+                await interaction.followup.send(
+                    "Ungültige Nachricht! Entweder Nachrichtenlink oder Nachrichten-ID eingeben.",
+                    ephemeral=True
+                )
+                return
+            try:
+                start_message = await channel.fetch_message(msg_id)
+            except discord.NotFound:
+                await interaction.followup.send(
+                    "Nachricht nicht gefunden!",
+                    ephemeral=True
+                )
+                return
+
+        await self._run_offtopic_analysis(interaction, start_message, ziel)
+
+    # ==================== CONTEXT MENU ====================
+
+    @app_commands.context_menu(name="Off-Topic ab hier")
+    @app_commands.guild_only()
+    async def offtopic_context(self, interaction: discord.Interaction, message: discord.Message):
+        """Analyze messages for off-topic discussion starting from this message."""
+        await interaction.response.defer()
+        await self._run_offtopic_analysis(interaction, message, None)
+
+    # ==================== CORE LOGIC ====================
+
+    async def _run_offtopic_analysis(
+        self,
+        interaction: discord.Interaction,
+        start_message: discord.Message = None,
+        ziel: discord.TextChannel = None
+    ):
+        """Core logic for off-topic analysis."""
         guild = interaction.guild
         channel = interaction.channel
         user = interaction.user
 
-        self.log.info(f"/offtopic used by {user} ({user.id}) in #{channel.name} ({channel.id})")
+        self.log.info(f"offtopic analysis by {user} ({user.id}) in #{channel.name} ({channel.id})")
 
         # Check if user has required role
         allowed_role_ids = await self.config.guild(guild).allowed_role_ids()
@@ -87,6 +141,16 @@ class OffTopic(commands.Cog):
             user_role_ids = [r.id for r in user.roles]
             if not any(role_id in user_role_ids for role_id in allowed_role_ids):
                 await interaction.followup.send("Arr, du hast keine Berechtigung für diesen Befehl, Landratte!", ephemeral=True)
+                return
+
+        # Check if start_message is within 3 hours
+        if start_message:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+            if start_message.created_at < cutoff:
+                await interaction.followup.send(
+                    "Die Nachricht ist zu alt! Maximal 3 Stunden zurück.",
+                    ephemeral=True
+                )
                 return
 
         # Determine destination channel
@@ -129,46 +193,6 @@ class OffTopic(commands.Cog):
                 ephemeral=True
             )
             return
-
-        # Parse message link or ID if provided
-        start_message = None
-        if nachricht:
-            msg_id = None
-            # Try message URL first
-            match = re.match(r'https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)', nachricht)
-            if match:
-                msg_guild_id, msg_channel_id, msg_id = map(int, match.groups())
-                if msg_channel_id != channel.id:
-                    await interaction.followup.send(
-                        "Die Nachricht muss aus diesem Kanal sein!",
-                        ephemeral=True
-                    )
-                    return
-            # Try plain message ID
-            elif nachricht.isdigit():
-                msg_id = int(nachricht)
-            else:
-                await interaction.followup.send(
-                    "Ungültige Nachricht! Entweder Nachrichtenlink oder Nachrichten-ID eingeben.",
-                    ephemeral=True
-                )
-                return
-            try:
-                start_message = await channel.fetch_message(msg_id)
-            except discord.NotFound:
-                await interaction.followup.send(
-                    "Nachricht nicht gefunden!",
-                    ephemeral=True
-                )
-                return
-            # Check if within 3 hours
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
-            if start_message.created_at < cutoff:
-                await interaction.followup.send(
-                    "Die Nachricht ist zu alt! Maximal 3 Stunden zurück.",
-                    ephemeral=True
-                )
-                return
 
         # Get prompt - different logic for custom destination vs off-topic
         is_custom_destination = ziel and ziel.id != default_offtopic_id
