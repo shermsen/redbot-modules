@@ -10,6 +10,54 @@ import logging
 import re
 
 
+# Modal for context menu confirmation
+class OffTopicConfirmModal(discord.ui.Modal, title="Off-Topic verschieben"):
+    channel_input = discord.ui.TextInput(
+        label="Zielkanal",
+        placeholder="#off-topic",
+        required=False,
+        max_length=100
+    )
+
+    def __init__(self, message: discord.Message):
+        super().__init__()
+        self.target_message = message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("OffTopic")
+        if not cog:
+            await interaction.response.send_message("OffTopic Cog nicht geladen!", ephemeral=True)
+            return
+
+        # Parse channel input
+        ziel = None
+        channel_text = self.channel_input.value.strip()
+        if channel_text:
+            # Try to find channel by mention, name, or ID
+            channel_text = channel_text.lstrip('#')
+            # Try by ID
+            if channel_text.isdigit():
+                ziel = interaction.guild.get_channel(int(channel_text))
+            # Try by name
+            if not ziel:
+                ziel = discord.utils.get(interaction.guild.text_channels, name=channel_text)
+            # Try extracting ID from mention format <#123>
+            if not ziel:
+                match = re.match(r'<#(\d+)>', self.channel_input.value)
+                if match:
+                    ziel = interaction.guild.get_channel(int(match.group(1)))
+
+            if not ziel:
+                await interaction.response.send_message(
+                    f"Kanal '{self.channel_input.value}' nicht gefunden!",
+                    ephemeral=True
+                )
+                return
+
+        await interaction.response.defer()
+        await cog._run_offtopic_analysis(interaction, self.target_message, ziel)
+
+
 # Context menu command (must be defined outside the class for Red)
 @app_commands.context_menu(name="Off-Topic ab hier")
 async def offtopic_context_menu(interaction: discord.Interaction, message: discord.Message):
@@ -23,8 +71,8 @@ async def offtopic_context_menu(interaction: discord.Interaction, message: disco
         await interaction.response.send_message("OffTopic Cog nicht geladen!", ephemeral=True)
         return
 
-    await interaction.response.defer()
-    await cog._run_offtopic_analysis(interaction, message, None)
+    # Show confirmation modal
+    await interaction.response.send_modal(OffTopicConfirmModal(message))
 
 
 class OffTopic(commands.Cog):
