@@ -62,7 +62,7 @@ class OffTopic(commands.Cog):
 
     @app_commands.command(name="offtopic", description="Arr! Schaut ob hier wer vom Kurs abgekommen ist")
     @app_commands.describe(
-        nachricht="Link zur Startnachricht (optional)",
+        nachricht="Link oder ID der Startnachricht (optional)",
         ziel="Zielkanal für Off-Topic Nachrichten (optional)"
     )
     @app_commands.guild_only()
@@ -130,20 +130,26 @@ class OffTopic(commands.Cog):
             )
             return
 
-        # Parse message link if provided
+        # Parse message link or ID if provided
         start_message = None
         if nachricht:
+            msg_id = None
+            # Try message URL first
             match = re.match(r'https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)', nachricht)
-            if not match:
+            if match:
+                msg_guild_id, msg_channel_id, msg_id = map(int, match.groups())
+                if msg_channel_id != channel.id:
+                    await interaction.followup.send(
+                        "Die Nachricht muss aus diesem Kanal sein!",
+                        ephemeral=True
+                    )
+                    return
+            # Try plain message ID
+            elif nachricht.isdigit():
+                msg_id = int(nachricht)
+            else:
                 await interaction.followup.send(
-                    "Ungültiger Nachrichtenlink! Rechtsklick auf Nachricht → 'Nachrichtenlink kopieren'",
-                    ephemeral=True
-                )
-                return
-            msg_guild_id, msg_channel_id, msg_id = map(int, match.groups())
-            if msg_channel_id != channel.id:
-                await interaction.followup.send(
-                    "Die Nachricht muss aus diesem Kanal sein!",
+                    "Ungültige Nachricht! Entweder Nachrichtenlink oder Nachrichten-ID eingeben.",
                     ephemeral=True
                 )
                 return
