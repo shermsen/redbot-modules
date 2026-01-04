@@ -2,7 +2,7 @@
     "author": ["hauge"],
     "name": "offtopic",
     "description": "Detects off-topic discussions using AI and moves them to a designated channel.",
-    "install_msg": "Requires an OpenAI API key and the TransferChannel cog. Use `[p]set api openai api_key,<YOUR_KEY>`. See `!offtopic settings` for configuration.",
+    "install_msg": "Requires an OpenAI API key and the TransferChannel cog. Use `[p]set api offtopic openai_api_key,<YOUR_KEY>`. See `!offtopic settings` for configuration.",
     "short": "AI-powered off-topic detection",
     "tags": ["moderation", "ai", "openai", "offtopic"],
     "requirements": ["openai"],

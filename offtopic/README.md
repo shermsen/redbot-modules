@@ -34,7 +34,7 @@ Detects off-topic discussions using AI and moves them to a designated channel.
 
 ### 1. Set OpenAI API Key
 ```
-[p]set api openai api_key,YOUR_API_KEY
+[p]set api offtopic openai_api_key,YOUR_API_KEY
 ```
 
 ### 2. Set Off-Topic Destination Channel
@@ -107,8 +107,8 @@ The better your topic description, the more accurate the detection will be.
 ### "TransferChannel cog is not installed"
 Install it from AAA3A-cogs (see Installation section).
 
-### "OpenAI API key not configured"
-Run `[p]set api openai api_key,YOUR_KEY` with your OpenAI API key.
+### "API key not configured"
+Run `[p]set api offtopic openai_api_key,YOUR_KEY` with your OpenAI API key.
 
 ### "No topic configured for this channel"
 Run `!offtopic settopic` in the channel and describe what it's for.

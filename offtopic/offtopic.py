@@ -47,8 +47,8 @@ class OffTopic(red_commands.Cog):
     async def _get_openai_client(self) -> Optional[AsyncOpenAI]:
         """Get or create OpenAI client."""
         if self._client is None:
-            api_keys = await self.bot.get_shared_api_tokens("openai")
-            api_key = api_keys.get("api_key")
+            api_keys = await self.bot.get_shared_api_tokens("offtopic")
+            api_key = api_keys.get("openai_api_key")
             if not api_key:
                 return None
             base_url = await self.config.openai_base_url()
@@ -112,7 +112,7 @@ class OffTopic(red_commands.Cog):
         client = await self._get_openai_client()
         if not client:
             await interaction.followup.send(
-                "OpenAI API key not configured. Ask an admin to run `[p]set api openai api_key,YOUR_KEY`.",
+                "API key not configured. Ask an admin to run `[p]set api offtopic openai_api_key,YOUR_KEY`.",
                 ephemeral=True
             )
             return
@@ -393,8 +393,8 @@ class OffTopic(red_commands.Cog):
         )
 
         # Check API key status
-        api_keys = await self.bot.get_shared_api_tokens("openai")
-        api_status = "Configured" if api_keys.get("api_key") else "Not set"
+        api_keys = await self.bot.get_shared_api_tokens("offtopic")
+        api_status = "Configured" if api_keys.get("openai_api_key") else "Not set"
         embed.add_field(name="API Key", value=api_status, inline=True)
 
         # Check TransferChannel
