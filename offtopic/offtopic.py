@@ -289,6 +289,8 @@ class OffTopic(commands.Cog):
         content_preview = first_offtopic_msg.content[:100]
         if len(first_offtopic_msg.content) > 100:
             content_preview += "..."
+        # Quote each line for Discord markdown
+        content_preview = content_preview.replace("\n", "\n> ")
 
         vote_threshold = await self.config.guild(guild).vote_threshold()
         vote_timeout = await self.config.guild(guild).vote_timeout()
