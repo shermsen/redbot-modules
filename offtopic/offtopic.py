@@ -3,7 +3,7 @@ from redbot.core import Config, checks, commands, app_commands
 from redbot.core.bot import Red
 from openai import AsyncOpenAI
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 import asyncio
 import json
 import logging
@@ -52,6 +52,11 @@ class OffTopic(commands.Cog):
         self.config.register_guild(**default_guild)
         self._client: Optional[AsyncOpenAI] = None
 
+        # Rate limiting
+        self._guild_usage: Dict[int, List[datetime]] = {}
+        self._user_usage: Dict[Tuple[int, int], List[datetime]] = {}
+        self._user_blocked: Dict[Tuple[int, int], datetime] = {}
+
     async def cog_load(self):
         """Called when the cog is loaded."""
         pass
@@ -74,6 +79,42 @@ class OffTopic(commands.Cog):
     def _reset_client(self):
         """Reset client to pick up new config."""
         self._client = None
+
+    def _check_rate_limit(self, guild_id: int, user_id: int) -> Optional[str]:
+        """Check rate limits. Returns error message if blocked, None if OK."""
+        now = datetime.now(timezone.utc)
+        key = (guild_id, user_id)
+
+        # Check if user is blocked
+        if key in self._user_blocked:
+            if now < self._user_blocked[key]:
+                remaining = int((self._user_blocked[key] - now).total_seconds() // 60) + 1
+                return f"Du bist noch {remaining} Minute(n) gesperrt wegen zu vieler Anfragen!"
+            else:
+                del self._user_blocked[key]
+
+        # Check server-wide limit (2/min)
+        guild_times = self._guild_usage.get(guild_id, [])
+        one_min_ago = now - timedelta(minutes=1)
+        guild_times = [t for t in guild_times if t > one_min_ago]
+        if len(guild_times) >= 2:
+            return "Zu viele Anfragen auf diesem Server! Warte eine Minute."
+
+        # Check user abuse (3 in 5 min = block for 5 min)
+        user_times = self._user_usage.get(key, [])
+        five_min_ago = now - timedelta(minutes=5)
+        user_times = [t for t in user_times if t > five_min_ago]
+        if len(user_times) >= 3:
+            self._user_blocked[key] = now + timedelta(minutes=5)
+            return "Zu viele Anfragen! Du bist für 5 Minuten gesperrt."
+
+        # Record usage
+        guild_times.append(now)
+        user_times.append(now)
+        self._guild_usage[guild_id] = guild_times
+        self._user_usage[key] = user_times
+
+        return None
 
     # ==================== SLASH COMMAND ====================
 
@@ -142,6 +183,23 @@ class OffTopic(commands.Cog):
         user = interaction.user
 
         self.log.info(f"offtopic analysis by {user} ({user.id}) in #{channel.name} ({channel.id})")
+
+        # Check 1-month membership requirement
+        member = guild.get_member(user.id)
+        if member and member.joined_at:
+            membership_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            if member.joined_at > membership_cutoff:
+                await interaction.followup.send(
+                    "Arr, du musst mindestens 1 Monat auf dem Server sein!",
+                    ephemeral=True
+                )
+                return
+
+        # Check rate limits
+        rate_error = self._check_rate_limit(guild.id, user.id)
+        if rate_error:
+            await interaction.followup.send(rate_error, ephemeral=True)
+            return
 
         # Check if user has required role
         allowed_role_ids = await self.config.guild(guild).allowed_role_ids()
