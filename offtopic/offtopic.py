@@ -197,8 +197,18 @@ class OffTopic(commands.Cog):
             return
 
         # Fetch messages (from start_message if provided, else last 30)
+        user_suggested_id = None
         if start_message:
-            messages = [start_message]
+            user_suggested_id = str(start_message.id)
+            # Fetch some context BEFORE the linked message
+            context_before = []
+            async for msg in channel.history(before=start_message, limit=10):
+                if not msg.author.bot:
+                    context_before.append(msg)
+            context_before.reverse()  # Oldest first
+
+            # Then the linked message and everything after
+            messages = context_before + [start_message]
             async for msg in channel.history(after=start_message, oldest_first=True):
                 if not msg.author.bot:
                     messages.append(msg)
@@ -210,7 +220,7 @@ class OffTopic(commands.Cog):
             return
 
         # Analyze with OpenAI
-        result = await self._analyze_messages(client, messages, server_prompt)
+        result = await self._analyze_messages(client, messages, server_prompt, user_suggested_id, is_custom_destination)
         if result is None:
             await interaction.followup.send("Konnte die Nachrichten nicht analysieren. Versuch's später nochmal!", ephemeral=True)
             return
@@ -503,20 +513,55 @@ class OffTopic(commands.Cog):
         return list(reversed(messages))
 
     async def _analyze_messages(
-        self, client: AsyncOpenAI, messages: List[discord.Message], server_prompt: str
+        self, client: AsyncOpenAI, messages: List[discord.Message], server_prompt: str,
+        user_suggested_id: str = None, is_wrong_channel: bool = False
     ) -> Optional[Tuple[Optional[str], str]]:
-        """Analyze messages with OpenAI to find off-topic content."""
+        """Analyze messages with OpenAI to find off-topic or wrong-channel content."""
         model = await self.config.openai_model()
 
         # Format messages for the prompt
         formatted = []
         for msg in messages:
             content = msg.content.replace('\n', ' ')[:200]
-            formatted.append(f"ID: {msg.id} | Author: {msg.author.display_name} | Content: {content}")
+            if user_suggested_id and str(msg.id) == user_suggested_id:
+                marker = " <<<< USER VERMUTET HIER BEGINNT ES"
+            else:
+                marker = ""
+            formatted.append(f"ID: {msg.id} | Author: {msg.author.display_name} | Content: {content}{marker}")
 
         messages_text = "\n".join(formatted)
 
-        system_prompt = f"""Du analysierst Discord-Nachrichten um zu erkennen, wo eine Konversation entgleist ist.
+        if is_wrong_channel:
+            # Wrong channel detection prompt
+            user_hint = ""
+            if user_suggested_id:
+                user_hint = f"\n\nHINWEIS: Ein User hat vorgeschlagen, dass falsch platzierte Nachrichten bei {user_suggested_id} beginnen (markiert mit <<<<). Prüfe ob das stimmt - du kannst auch eine frühere oder spätere Nachricht wählen, oder null wenn alles korrekt platziert ist."
+
+            system_prompt = f"""Du analysierst Discord-Nachrichten um zu erkennen, welche im falschen Kanal gepostet wurden.
+
+{server_prompt}
+
+Du erhältst eine Liste von Nachrichten in chronologischer Reihenfolge.
+Finde die ERSTE Nachricht, die im falschen Kanal gepostet wurde und eigentlich in den Zielkanal gehört.{user_hint}
+
+Antworte NUR mit einem JSON-Objekt in diesem Format:
+{{"first_offtopic_id": "message_id", "reason": "kurze Erklärung auf Deutsch warum diese Nachricht in den anderen Kanal gehört"}}
+Wenn alle Nachrichten im richtigen Kanal sind: {{"first_offtopic_id": null, "reason": "Alle Nachrichten sind korrekt platziert"}}
+
+WICHTIG: Antworte NUR mit validem JSON, kein anderer Text. Der reason MUSS auf Deutsch sein."""
+
+            user_prompt = f"""Nachrichten (älteste zuerst):
+{messages_text}
+
+Finde die ERSTE Nachricht die im falschen Kanal ist (falls vorhanden)."""
+
+        else:
+            # Off-topic detection prompt
+            user_hint = ""
+            if user_suggested_id:
+                user_hint = f"\n\nHINWEIS: Ein User hat vorgeschlagen, dass Off-Topic bei Nachricht {user_suggested_id} beginnt (markiert mit <<<<). Prüfe ob das stimmt - du kannst auch eine frühere oder spätere Nachricht wählen, oder null wenn alles on-topic ist."
+
+            system_prompt = f"""Du analysierst Discord-Nachrichten um zu erkennen, wo eine Konversation entgleist ist.
 
 Server-Kontext: {server_prompt}
 
@@ -524,7 +569,7 @@ Du erhältst eine Liste von Nachrichten in chronologischer Reihenfolge.
 Finde die ERSTE Nachricht, bei der die Konversation ins Off-Topic abgedriftet ist.
 Achte auf: zusammenhangslose Streitereien, persönliche Angriffe, ausufernde Witz-Ketten, random Nonsens, oder Diskussionen die nichts mit dem Server-Thema zu tun haben.
 
-Sei tolerant - kurze Witze oder kleine Abschweifungen sind okay. Nur flaggen wenn die Konversation wirklich entgleist ist.
+Sei tolerant - kurze Witze oder kleine Abschweifungen sind okay. Nur flaggen wenn die Konversation wirklich entgleist ist.{user_hint}
 
 Antworte NUR mit einem JSON-Objekt in diesem Format:
 {{"first_offtopic_id": "message_id", "reason": "kurze Erklärung auf Deutsch warum das Off-Topic ist"}}
@@ -532,7 +577,7 @@ Wenn alles in Ordnung ist: {{"first_offtopic_id": null, "reason": "Alles on-topi
 
 WICHTIG: Antworte NUR mit validem JSON, kein anderer Text. Der reason MUSS auf Deutsch sein."""
 
-        user_prompt = f"""Nachrichten (älteste zuerst):
+            user_prompt = f"""Nachrichten (älteste zuerst):
 {messages_text}
 
 Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden)."""
