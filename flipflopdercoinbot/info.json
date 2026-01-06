@@ -1,0 +1,12 @@
+{
+    "author": ["hauge"],
+    "name": "flipflopdercoinbot",
+    "description": "Coin flip bot with random.org integration and Money Boy quotes",
+    "install_msg": "FlipFlopDerCoinBot installed! Use !flip for German coin flips (Kopf/Zahl) with Money Boy swag.",
+    "short": "German coin flip with Money Boy quotes",
+    "tags": ["fun", "random", "coin", "flip", "money boy"],
+    "requirements": ["aiohttp"],
+    "type": "COG",
+    "end_user_data_statement": "This cog makes external API calls to random.org. No user data is stored.",
+    "min_bot_version": "3.5.0"
+}
