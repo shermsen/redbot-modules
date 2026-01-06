@@ -4,6 +4,7 @@ import aiohttp
 import asyncio
 import random
 import logging
+import time
 
 # Money Boy quotes - YSL Know Plug Swag Collection
 MONEY_BOY_QUOTES = [
@@ -485,7 +486,7 @@ class FlipFlopDerCoinBot(commands.Cog):
             color = discord.Color.gold()
         else:
             result_text = "Zahl"
-            image_url = "https://files.catbox.moe/u34ze7.jpg"
+            image_url = "https://files.catbox.moe/x1kwoa.png"
             color = discord.Color.from_rgb(192, 192, 192)  # Silver
 
         # Create embed
@@ -497,9 +498,10 @@ class FlipFlopDerCoinBot(commands.Cog):
         embed.set_image(url=image_url)
 
         # Add footer based on whether fallback was used
+        timestamp = int(time.time())
         if used_fallback:
-            embed.set_footer(text="⚠️ random.org nicht erreichbar - Python-Zufallsgenerator verwendet")
+            embed.set_footer(text=f"⚠️ random.org nicht erreichbar - Python-Zufallsgenerator verwendet • <t:{timestamp}:R>")
         else:
-            embed.set_footer(text="✓ Powered by random.org")
+            embed.set_footer(text=f"✓ Powered by random.org • <t:{timestamp}:R>")
 
         await ctx.send(embed=embed)
