@@ -6,6 +6,45 @@ import random
 import logging
 from datetime import datetime
 
+
+class FlipView(discord.ui.View):
+    """View with a button to flip again"""
+
+    def __init__(self, cog):
+        super().__init__(timeout=600)  # 10 minutes
+        self.cog = cog
+        self.message = None
+
+    @discord.ui.button(label="nomma flippne", style=discord.ButtonStyle.primary)
+    async def flip_again_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Button callback to flip the coin again"""
+        # Flip the coin
+        coin_value, used_fallback = await self.cog._flip_coin()
+
+        # Get random Money Boy quote
+        quote = random.choice(MONEY_BOY_QUOTES)
+
+        # Create new embed
+        embed = self.cog._create_flip_embed(coin_value, quote, used_fallback)
+
+        # Create new view with fresh timeout
+        new_view = FlipView(self.cog)
+        new_view.message = self.message
+
+        # Update the message
+        await interaction.response.edit_message(embed=embed, view=new_view)
+
+    async def on_timeout(self):
+        """Disable button when timeout expires"""
+        if self.message:
+            for item in self.children:
+                item.disabled = True
+            try:
+                await self.message.edit(view=self)
+            except discord.errors.NotFound:
+                pass  # Message was deleted
+
+
 # Money Boy quotes - YSL Know Plug Swag Collection
 MONEY_BOY_QUOTES = [
     "Dreh den Swag auf, ich bin fresher als du!",
@@ -477,8 +516,8 @@ class FlipFlopDerCoinBot(commands.Cog):
             self.log.error(f"Unexpected error during coin flip: {e}, using fallback")
             return (random.randint(0, 1), True)
 
-    async def _send_flip_result(self, ctx, coin_value, quote, used_fallback):
-        """Send embed with coin flip result"""
+    def _create_flip_embed(self, coin_value, quote, used_fallback):
+        """Create embed for coin flip result"""
         # Determine result text, image, and color
         if coin_value == 1:
             result_text = "Kopf"
@@ -504,4 +543,13 @@ class FlipFlopDerCoinBot(commands.Cog):
         else:
             embed.set_footer(text=f"✓ Powered by random.org • {timestamp}")
 
-        await ctx.send(embed=embed)
+        return embed
+
+    async def _send_flip_result(self, ctx, coin_value, quote, used_fallback):
+        """Send embed with coin flip result"""
+        embed = self._create_flip_embed(coin_value, quote, used_fallback)
+
+        # Create view with button
+        view = FlipView(self)
+        message = await ctx.send(embed=embed, view=view)
+        view.message = message
