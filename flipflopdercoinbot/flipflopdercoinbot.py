@@ -10,10 +10,21 @@ from datetime import datetime
 class FlipView(discord.ui.View):
     """View with a button to flip again"""
 
-    def __init__(self, cog):
-        super().__init__(timeout=600)  # 10 minutes
+    def __init__(self, cog, user_id):
+        super().__init__(timeout=3600)  # 1 hour
         self.cog = cog
+        self.user_id = user_id
         self.message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only allow the original command invoker to use the button"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Das ist nicht dein Button, Bro! Mach deinen eigenen Flip.",
+                ephemeral=True
+            )
+            return False
+        return True
 
     @discord.ui.button(label="nomma flippne", style=discord.ButtonStyle.primary)
     async def flip_again_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -28,7 +39,7 @@ class FlipView(discord.ui.View):
         embed = self.cog._create_flip_embed(coin_value, quote, used_fallback)
 
         # Create new view with fresh timeout
-        new_view = FlipView(self.cog)
+        new_view = FlipView(self.cog, self.user_id)
         new_view.message = self.message
 
         # Update the message
@@ -550,6 +561,6 @@ class FlipFlopDerCoinBot(commands.Cog):
         embed = self._create_flip_embed(coin_value, quote, used_fallback)
 
         # Create view with button
-        view = FlipView(self)
+        view = FlipView(self, ctx.author.id)
         message = await ctx.send(embed=embed, view=view)
         view.message = message
