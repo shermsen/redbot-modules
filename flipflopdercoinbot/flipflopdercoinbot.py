@@ -492,7 +492,7 @@ class FlipFlopDerCoinBot(commands.Cog):
         # Create embed
         embed = discord.Embed(
             title=f"🪙 Münzwurf: {result_text}!",
-            description=f'"{quote}"\n— Money Boy',
+            description=f'Der Boy findet:\n"{quote}"',
             color=color
         )
         embed.set_image(url=image_url)
