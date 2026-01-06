@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import random
 import logging
-import time
+from datetime import datetime
 
 # Money Boy quotes - YSL Know Plug Swag Collection
 MONEY_BOY_QUOTES = [
@@ -498,10 +498,10 @@ class FlipFlopDerCoinBot(commands.Cog):
         embed.set_image(url=image_url)
 
         # Add footer based on whether fallback was used
-        timestamp = int(time.time())
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if used_fallback:
-            embed.set_footer(text=f"⚠️ random.org nicht erreichbar - Python-Zufallsgenerator verwendet • <t:{timestamp}:R>")
+            embed.set_footer(text=f"⚠️ random.org nicht erreichbar - Python-Zufallsgenerator verwendet • {timestamp}")
         else:
-            embed.set_footer(text=f"✓ Powered by random.org • <t:{timestamp}:R>")
+            embed.set_footer(text=f"✓ Powered by random.org • {timestamp}")
 
         await ctx.send(embed=embed)
