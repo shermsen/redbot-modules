@@ -789,7 +789,7 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
                 emoji_name = getattr(reaction.emoji, 'name', str(reaction.emoji))
 
                 # Admin override emojis
-                if emoji_name in ['SadgeBusiness', 'Okay', 'subi', 'grrr', 'HYPERS', 'YEP']:
+                if emoji_name in ['SadgeBusiness', 'Okay', 'subi', 'grrr', 'HYPERS', 'YEP', 'this']:
                     async for user in reaction.users():
                         if not user.bot and user.guild_permissions.administrator:
                             self.log.info(f"Admin {user} forced approve with :{emoji_name}:")
@@ -843,6 +843,15 @@ Finde die ERSTE Nachricht wo die Konversation entgleist ist (falls vorhanden).""
 
             # TransferChannel reverses the list, so pass newest-first
             messages_to_transfer.reverse()
+
+            # Post header message in destination with source info
+            context_msg = None
+            async for msg in source.history(before=first_offtopic_msg, limit=1):
+                context_msg = msg
+                break
+            context_link = f" ([Kontext]({context_msg.jump_url}))" if context_msg else ""
+            header = f"📥 Aus {source.mention} verschoben{context_link}"
+            await destination.send(header)
 
             # Use TransferChannel's transfer_messages method directly
             await tc_cog.transfer_messages(
