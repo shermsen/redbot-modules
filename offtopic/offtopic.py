@@ -257,12 +257,12 @@ class OffTopic(commands.Cog):
                 await interaction.followup.send("Arr, du hast keine Berechtigung für diesen Befehl, Landratte!", ephemeral=True)
                 return
 
-        # Check if start_message is within 3 hours
+        # Check if start_message is within 4 hours
         if start_message:
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
             if start_message.created_at < cutoff:
                 await interaction.followup.send(
-                    "Die Nachricht ist zu alt! Maximal 3 Stunden zurück.",
+                    "Die Nachricht ist zu alt! Maximal 4 Stunden zurück.",
                     ephemeral=True
                 )
                 return
@@ -344,10 +344,11 @@ class OffTopic(commands.Cog):
         user_suggested_id = None
         if start_message:
             user_suggested_id = str(start_message.id)
-            # Fetch some context BEFORE the linked message
+            # Fetch some context BEFORE the linked message (within 4 hour window)
             context_before = []
+            context_cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
             async for msg in channel.history(before=start_message, limit=10):
-                if not msg.author.bot:
+                if not msg.author.bot and msg.created_at >= context_cutoff:
                     context_before.append(msg)
             context_before.reverse()  # Oldest first
 
@@ -641,7 +642,7 @@ class OffTopic(commands.Cog):
     # ==================== HELPER METHODS ====================
 
     async def _fetch_recent_messages(
-        self, channel: discord.TextChannel, limit: int = 30, max_age_hours: int = 3
+        self, channel: discord.TextChannel, limit: int = 30, max_age_hours: int = 4
     ) -> List[discord.Message]:
         """Fetch recent human messages from the channel."""
         messages = []
@@ -705,7 +706,7 @@ Finde die ERSTE Nachricht die im falschen Kanal ist (falls vorhanden)."""
             # Off-topic detection prompt
             user_hint = ""
             if user_suggested_id:
-                user_hint = f"\n\nHINWEIS: Ein User hat vorgeschlagen, dass Off-Topic bei Nachricht {user_suggested_id} beginnt (markiert mit <<<<). Prüfe ob das stimmt - du kannst auch eine frühere oder spätere Nachricht wählen, oder null wenn alles on-topic ist."
+                user_hint = f"\n\nWICHTIG: Ein User hat Nachricht {user_suggested_id} als Off-Topic-Beginn markiert (mit <<<<). Andere User werden über das Ergebnis abstimmen, daher sei NICHT übermäßig skeptisch. Wenn die markierte Stelle plausibel als Off-Topic interpretiert werden kann (auch Meta-Diskussionen über Server-Regeln, Moderation, oder Themen die nicht direkt zum Kanal passen), bestätige sie. Wähle nur dann eine andere Nachricht wenn das Off-Topic eindeutig früher begann, oder null NUR wenn die Konversation EINDEUTIG on-topic ist."
 
             system_prompt = f"""Du analysierst Discord-Nachrichten um zu erkennen, wo eine Konversation entgleist ist.
 
